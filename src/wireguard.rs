@@ -110,6 +110,8 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
                         // Parse the bytes as an IP packet
                         match smoltcp::wire::Ipv4Packet::new_checked(&b)  {
                             Ok(p) => {
+                                println!("IPv4 Packet: {:?}", p);
+
                                 // Route this packet
                                 match p.protocol() {
                                     IpProtocol::HopByHop => todo!(),
@@ -117,7 +119,7 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
                                     IpProtocol::Igmp => todo!(),
                                     IpProtocol::Tcp => {
                                         // Route this packet
-                                        let tcp_packet = match TcpPacket::new_checked(&b) {
+                                        let tcp_packet = match TcpPacket::new_checked(p.payload()) {
                                             Ok(p) => p,
                                             Err(_) => {
                                                 println!("Couldn't parse TCP packet, skipping");
@@ -143,7 +145,7 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
                                     }
                                     IpProtocol::Udp => {
                                         // Route this packet
-                                        let udp_packet = match UdpPacket::new_checked(&b) {
+                                        let udp_packet = match UdpPacket::new_checked(p.payload()) {
                                             Ok(p) => p,
                                             Err(_) => {
                                                 println!("Couldn't parse UDP packet, skipping");
