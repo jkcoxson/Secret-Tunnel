@@ -11,3 +11,4 @@ tokio = { version = "*", features = ["full"] }
 boringtun = { version = "*" }
 packet = { version = "*" }
 smoltcp = { version = "*" }
+rand = { version = "*" }

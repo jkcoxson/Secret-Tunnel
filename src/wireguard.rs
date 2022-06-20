@@ -55,7 +55,6 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
 
     let server_private = X25519SecretKey::from_str(&server_private.to_string()).unwrap();
     let client_public = X25519PublicKey::from_str(&client_public.to_string()).unwrap();
-    println!("Keys read in");
 
     let tun = boringtun::noise::Tunn::new(
         Arc::new(server_private),

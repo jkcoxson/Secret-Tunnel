@@ -1,5 +1,6 @@
 // Authored by Jackson Coxson
 
+use rand::Rng;
 use std::sync::Arc;
 use tokio::sync::{
     mpsc::{UnboundedReceiver, UnboundedSender},
@@ -79,6 +80,31 @@ impl Router {
         }
 
         None
+    }
+
+    /// Gets a random port that is not in use
+    pub async fn random_port(&self) -> u16 {
+        let mut rng = rand::thread_rng();
+        let mut port = rng.gen_range(1024..65535);
+
+        let used_ports = self.get_used_ports().await;
+
+        while used_ports.contains(&port) {
+            port = rng.gen_range(1024..65535);
+        }
+
+        port
+    }
+
+    async fn get_used_ports(&self) -> Vec<u16> {
+        let mut ports = Vec::new();
+        let lock = self.routes.lock().await;
+
+        for route in &*lock {
+            ports.push(route.port);
+        }
+
+        ports
     }
 }
 
