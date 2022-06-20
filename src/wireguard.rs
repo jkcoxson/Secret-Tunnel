@@ -134,7 +134,7 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
                                         };
 
                                         // Send the packet
-                                        match route.send(b.to_vec()) {
+                                        match route.send(p.payload().to_vec()) {
                                             Ok(_) => {}
                                             Err(_) => {
                                                 println!("Router endpoint is down, dropping packet");
@@ -160,7 +160,7 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
                                         };
 
                                         // Send the packet
-                                        match route.send(b.to_vec()) {
+                                        match route.send(p.payload().to_vec()) {
                                             Ok(_) => {}
                                             Err(_) => {
                                                 println!("Router endpoint is down, dropping packet");
