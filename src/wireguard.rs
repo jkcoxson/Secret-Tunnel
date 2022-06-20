@@ -4,14 +4,17 @@
 use std::{str::FromStr, sync::Arc};
 
 use boringtun::crypto::{X25519PublicKey, X25519SecretKey};
+use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
 use tokio::{
     net::UdpSocket,
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 
+use crate::router::Router;
+
 pub struct Wireguard {
     // This will be filled once the first packet comes in from Wireguard
-    rec: UnboundedReceiver<Vec<u8>>,
+    pub router: Router,
     send: UnboundedSender<Vec<u8>>,
 }
 
@@ -22,22 +25,19 @@ impl Wireguard {
         let socket = UdpSocket::bind(bind.clone())
             .await
             .expect("Failed to bind, bad address?");
-        let (out_tx, out_rx) = tokio::sync::mpsc::unbounded_channel();
         let (in_tx, in_rx) = tokio::sync::mpsc::unbounded_channel();
 
+        let router = Router::new();
+
         // Start a task to handle Wireguard
+        let router_clone = router.clone();
         tokio::spawn(async move {
-            wg_thread(in_tx, out_rx, socket).await;
+            wg_thread(in_rx, socket, router_clone).await;
         });
         Self {
-            rec: in_rx,
-            send: out_tx,
+            router,
+            send: in_tx,
         }
-    }
-
-    /// Recieves a raw IP packet from Wireguard
-    pub async fn recv(&mut self) -> Vec<u8> {
-        self.rec.recv().await.unwrap()
     }
 
     /// Sends a raw IP packet to Wireguard
@@ -46,11 +46,7 @@ impl Wireguard {
     }
 }
 
-async fn wg_thread(
-    sender: UnboundedSender<Vec<u8>>,
-    mut receiver: UnboundedReceiver<Vec<u8>>,
-    socket: UdpSocket,
-) {
+async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, router: Router) {
     println!("Starting Wireguard server...");
 
     // Read in all the keys
@@ -110,7 +106,79 @@ async fn wg_thread(
                         if target.is_none() {
                             target = Some(addr)
                         }
-                        sender.send(b.to_vec()).unwrap();
+
+                        // Parse the bytes as an IP packet
+                        match smoltcp::wire::Ipv4Packet::new_checked(&b)  {
+                            Ok(p) => {
+                                // Route this packet
+                                match p.protocol() {
+                                    IpProtocol::HopByHop => todo!(),
+                                    IpProtocol::Icmp => todo!(),
+                                    IpProtocol::Igmp => todo!(),
+                                    IpProtocol::Tcp => {
+                                        // Route this packet
+                                        let tcp_packet = match TcpPacket::new_checked(&b) {
+                                            Ok(p) => p,
+                                            Err(_) => {
+                                                println!("Couldn't parse TCP packet, skipping");
+                                                continue;
+                                            }
+                                        };
+
+                                        let route = match router.find(p.protocol().to_string(), p.dst_addr().to_string(), tcp_packet.dst_port()).await {
+                                            Some(r) => r,
+                                            None => {
+                                                println!("Couldn't find route, dropping packet");
+                                                continue;
+                                            }
+                                        };
+
+                                        // Send the packet
+                                        match route.send(b.to_vec()) {
+                                            Ok(_) => {}
+                                            Err(_) => {
+                                                println!("Router endpoint is down, dropping packet");
+                                            }
+                                        }
+                                    }
+                                    IpProtocol::Udp => {
+                                        // Route this packet
+                                        let udp_packet = match UdpPacket::new_checked(&b) {
+                                            Ok(p) => p,
+                                            Err(_) => {
+                                                println!("Couldn't parse UDP packet, skipping");
+                                                continue;
+                                            }
+                                        };
+
+                                        let route = match router.find(p.protocol().to_string(), p.dst_addr().to_string(), udp_packet.dst_port()).await {
+                                            Some(r) => r,
+                                            None => {
+                                                println!("Couldn't find route, dropping packet");
+                                                continue;
+                                            }
+                                        };
+
+                                        // Send the packet
+                                        match route.send(b.to_vec()) {
+                                            Ok(_) => {}
+                                            Err(_) => {
+                                                println!("Router endpoint is down, dropping packet");
+                                            }
+                                        }
+                                    }
+                                    IpProtocol::Ipv6Route => todo!(),
+                                    IpProtocol::Ipv6Frag => todo!(),
+                                    IpProtocol::Icmpv6 => todo!(),
+                                    IpProtocol::Ipv6NoNxt => todo!(),
+                                    IpProtocol::Ipv6Opts => todo!(),
+                                    IpProtocol::Unknown(_) => todo!(),
+                                }
+                            }
+                            Err(e) => {
+                                println!("Malformed packet: {}", e);
+                            }
+                        }
                     }
                     boringtun::noise::TunnResult::WriteToTunnelV6(_b, _addr) => {
                         panic!("IPv6 not supported");
