@@ -41,7 +41,7 @@ impl Wireguard {
     }
 
     /// Sends a raw IP packet to Wireguard
-    async fn send(&self, raw: &[u8]) {
+    pub async fn send(&self, raw: &[u8]) {
         self.send.send(raw.to_vec()).unwrap();
     }
 }
@@ -106,9 +106,10 @@ async fn wg_thread(
                             }
                         }
                     }
-                    boringtun::noise::TunnResult::WriteToTunnelV4(b, _addr) => {
-                        let parsed = packet::ip::v4::Packet::unchecked(&b);
-                        target = Some(parsed.source());
+                    boringtun::noise::TunnResult::WriteToTunnelV4(b, addr) => {
+                        if target.is_none() {
+                            target = Some(addr)
+                        }
                         sender.send(b.to_vec()).unwrap();
                     }
                     boringtun::noise::TunnResult::WriteToTunnelV6(_b, _addr) => {
