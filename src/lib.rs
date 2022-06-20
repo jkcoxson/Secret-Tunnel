@@ -1,5 +1,7 @@
 // Authored by Jackson Coxson
 
+pub mod wireguard;
+
 #[cfg(test)]
 mod tests {
     #[test]
