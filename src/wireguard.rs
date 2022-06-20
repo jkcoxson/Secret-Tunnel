@@ -36,7 +36,7 @@ impl Wireguard {
     }
 
     /// Recieves a raw IP packet from Wireguard
-    async fn recv(&mut self) -> Vec<u8> {
+    pub async fn recv(&mut self) -> Vec<u8> {
         self.rec.recv().await.unwrap()
     }
 
