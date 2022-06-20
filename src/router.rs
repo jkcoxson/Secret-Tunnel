@@ -33,7 +33,7 @@ impl Router {
 
     pub async fn bind(
         &mut self,
-        protocol: impl Into<String>,
+        protocol: RouterProtocol,
         address: impl Into<String>,
         port: u16,
     ) -> Result<UnboundedReceiver<Vec<u8>>, ()> {
@@ -68,6 +68,8 @@ impl Router {
         let protocol = protocol.into();
         let address = address.into();
 
+        println!("Finding a route for {}:{} on {}", address, port, protocol);
+
         let lock = self.routes.lock().await;
 
         for route in &*lock {
@@ -77,6 +79,20 @@ impl Router {
         }
 
         None
+    }
+}
+
+pub enum RouterProtocol {
+    UDP,
+    TCP,
+}
+
+impl From<RouterProtocol> for String {
+    fn from(protocol: RouterProtocol) -> Self {
+        match protocol {
+            RouterProtocol::UDP => "UDP".to_string(),
+            RouterProtocol::TCP => "TCP".to_string(),
+        }
     }
 }
 

@@ -110,8 +110,6 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
                         // Parse the bytes as an IP packet
                         match smoltcp::wire::Ipv4Packet::new_checked(&b)  {
                             Ok(p) => {
-                                println!("IPv4 Packet: {:?}", p);
-
                                 // Route this packet
                                 match p.protocol() {
                                     IpProtocol::HopByHop => todo!(),
