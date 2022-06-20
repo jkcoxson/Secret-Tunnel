@@ -1,0 +1,12 @@
+[package]
+name = "secret_tunnel"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Give me a valid reason to not use *
+tokio = { version = "*", features = ["full"] }
+boringtun = { version = "*" }
+packet = { version = "*" }
