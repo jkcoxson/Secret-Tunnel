@@ -1,6 +1,5 @@
 // Authored by Jackson Coxson
 
-pub mod router;
 pub mod wireguard;
 
 #[cfg(test)]

@@ -1,21 +1,33 @@
 // Authored by Jackson Coxson
 // Holds stuff for maintaining a Wireguard connection
 
-use std::{str::FromStr, sync::Arc};
+use std::{
+    str::FromStr,
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc, Mutex,
+    },
+};
 
 use boringtun::crypto::{X25519PublicKey, X25519SecretKey};
-use smoltcp::wire::{IpProtocol, TcpPacket, UdpPacket};
+use smoltcp::phy::{Device, RxToken, TxToken};
 use tokio::{
     net::UdpSocket,
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
 };
 
-use crate::router::Router;
-
 pub struct Wireguard {
     // This will be filled once the first packet comes in from Wireguard
-    pub router: Router,
-    send: UnboundedSender<Vec<u8>>,
+    pub(crate) sender: UnboundedSender<Vec<u8>>,
+    pub(crate) token_senders: Arc<Mutex<Vec<Sender<Vec<u8>>>>>,
+}
+
+pub struct WireguardTx {
+    sender: UnboundedSender<Vec<u8>>,
+}
+
+pub struct WireguardRx {
+    receiver: Receiver<Vec<u8>>,
 }
 
 impl Wireguard {
@@ -25,28 +37,25 @@ impl Wireguard {
         let socket = UdpSocket::bind(bind.clone())
             .await
             .expect("Failed to bind, bad address?");
-        let (in_tx, in_rx) = tokio::sync::mpsc::unbounded_channel();
-
-        let router = Router::new();
-
+        let (incoming_tx, incoming_rx) = tokio::sync::mpsc::unbounded_channel();
         // Start a task to handle Wireguard
-        let router_clone = router.clone();
+        let token_senders = Arc::new(Mutex::new(Vec::new()));
+        let token_clone = Arc::clone(&token_senders);
         tokio::spawn(async move {
-            wg_thread(in_rx, socket, router_clone).await;
+            wg_thread(incoming_rx, token_clone, socket).await;
         });
         Self {
-            router,
-            send: in_tx,
+            token_senders,
+            sender: incoming_tx,
         }
-    }
-
-    /// Sends a raw IP packet to Wireguard
-    pub async fn send(&self, raw: &[u8]) {
-        self.send.send(raw.to_vec()).unwrap();
     }
 }
 
-async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, router: Router) {
+async fn wg_thread(
+    mut receiver: UnboundedReceiver<Vec<u8>>,
+    token_senders: Arc<Mutex<Vec<Sender<Vec<u8>>>>>,
+    socket: UdpSocket,
+) {
     println!("Starting Wireguard server...");
 
     // Read in all the keys
@@ -108,70 +117,19 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
 
                         // Parse the bytes as an IP packet
                         match smoltcp::wire::Ipv4Packet::new_checked(&b)  {
-                            Ok(p) => {
-                                // Route this packet
-                                match p.protocol() {
-                                    IpProtocol::HopByHop => todo!(),
-                                    IpProtocol::Icmp => todo!(),
-                                    IpProtocol::Igmp => todo!(),
-                                    IpProtocol::Tcp => {
-                                        // Route this packet
-                                        let tcp_packet = match TcpPacket::new_checked(p.payload()) {
-                                            Ok(p) => p,
-                                            Err(_) => {
-                                                println!("Couldn't parse TCP packet, skipping");
-                                                continue;
-                                            }
-                                        };
-
-                                        let route = match router.find(p.protocol().to_string(), p.dst_addr().to_string(), tcp_packet.dst_port()).await {
-                                            Some(r) => r,
-                                            None => {
-                                                println!("Couldn't find route, dropping packet");
-                                                continue;
-                                            }
-                                        };
-
-                                        // Send the packet
-                                        match route.send(p.payload().to_vec()) {
-                                            Ok(_) => {}
-                                            Err(_) => {
-                                                println!("Router endpoint is down, dropping packet");
-                                            }
+                            Ok(_) => {
+                                // Write to all the tokens
+                                let mut tokens = token_senders.lock().unwrap();
+                                let mut i = 0;
+                                while i < tokens.len() {
+                                    match tokens[i].send(b.to_vec()) {
+                                        Ok(_) => {}
+                                        Err(_) => {
+                                            println!("Token {} failed", i);
                                         }
                                     }
-                                    IpProtocol::Udp => {
-                                        // Route this packet
-                                        let udp_packet = match UdpPacket::new_checked(p.payload()) {
-                                            Ok(p) => p,
-                                            Err(_) => {
-                                                println!("Couldn't parse UDP packet, skipping");
-                                                continue;
-                                            }
-                                        };
-
-                                        let route = match router.find(p.protocol().to_string(), p.dst_addr().to_string(), udp_packet.dst_port()).await {
-                                            Some(r) => r,
-                                            None => {
-                                                println!("Couldn't find route, dropping packet");
-                                                continue;
-                                            }
-                                        };
-
-                                        // Send the packet
-                                        match route.send(p.payload().to_vec()) {
-                                            Ok(_) => {}
-                                            Err(_) => {
-                                                println!("Router endpoint is down, dropping packet");
-                                            }
-                                        }
-                                    }
-                                    IpProtocol::Ipv6Route => todo!(),
-                                    IpProtocol::Ipv6Frag => todo!(),
-                                    IpProtocol::Icmpv6 => todo!(),
-                                    IpProtocol::Ipv6NoNxt => todo!(),
-                                    IpProtocol::Ipv6Opts => todo!(),
-                                    IpProtocol::Unknown(_) => todo!(),
+                                    tokens.remove(i);
+                                    i += 1;
                                 }
                             }
                             Err(e) => {
@@ -186,10 +144,86 @@ async fn wg_thread(mut receiver: UnboundedReceiver<Vec<u8>>, socket: UdpSocket, 
             }
             s = receiver.recv() => {
                 // Send it to the tunnel
+                if s.is_none() {
+                    continue;
+                }
                 let mut buf = [0; 65536];
                 tun.encapsulate(&s.unwrap(), &mut buf);
                 socket.send_to(&buf, target.unwrap().to_string()).await.unwrap();
             }
         }
+    }
+}
+
+impl Device<'_> for Wireguard {
+    type RxToken = WireguardRx;
+
+    type TxToken = WireguardTx;
+
+    fn receive(&mut self) -> Option<(Self::RxToken, Self::TxToken)> {
+        println!("Preparing to receive");
+
+        // The problem here is that we can only send a token *if* there is data to receive
+
+        let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+        self.token_senders.lock().unwrap().push(tx);
+        Some((
+            WireguardRx { receiver: rx },
+            WireguardTx {
+                sender: self.sender.clone(),
+            },
+        ))
+    }
+
+    fn transmit(&mut self) -> Option<Self::TxToken> {
+        println!("Preparing to transmit");
+        Some(WireguardTx {
+            sender: self.sender.clone(),
+        })
+    }
+
+    fn capabilities(&self) -> smoltcp::phy::DeviceCapabilities {
+        println!("Getting capabilities");
+        let x = smoltcp::phy::DeviceCapabilities::default();
+        x
+    }
+}
+
+impl RxToken for WireguardRx {
+    fn consume<R, F>(self, _timestamp: smoltcp::time::Instant, f: F) -> smoltcp::Result<R>
+    where
+        F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
+    {
+        println!("Consuming RxToken");
+        let mut bytes = self.receiver.recv().unwrap();
+        f(&mut bytes)
+    }
+}
+
+impl TxToken for WireguardTx {
+    fn consume<R, F>(
+        self,
+        _timestamp: smoltcp::time::Instant,
+        len: usize,
+        f: F,
+    ) -> smoltcp::Result<R>
+    where
+        F: FnOnce(&mut [u8]) -> smoltcp::Result<R>,
+    {
+        println!("Consuming TxToken");
+        // Create a buffer with the correct length
+        let mut buf = vec![0; len];
+        let res = match f(&mut buf) {
+            Ok(r) => r,
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        };
+
+        // Send it
+        self.sender.send(buf).unwrap();
+
+        Ok(res)
     }
 }
