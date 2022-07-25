@@ -7,8 +7,11 @@ edition = "2021"
 
 [dependencies]
 # Give me a valid reason to not use *
-tokio = { version = "*", features = ["full"] }
 boringtun = { version = "*" }
-packet = { version = "*" }
+etherparse = { version = "*" }
 smoltcp = { version = "*" }
 rand = { version = "*" }
+
+[[bin]]
+name = "yeet"
+path = "src/yeet.rs"

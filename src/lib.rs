@@ -1,5 +1,6 @@
 // Authored by Jackson Coxson
 
+pub mod packets;
 pub mod wireguard;
 
 #[cfg(test)]
