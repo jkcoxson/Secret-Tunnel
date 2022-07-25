@@ -26,19 +26,24 @@ impl From<Ipv4> for Vec<u8> {
         to_return.push(ipv4.ttl);
         // Protocol
         to_return.push(ipv4.protocol);
-        // Checksum - left as 0 to skip validation (because lazy)
+        // Checksum
         to_return.extend_from_slice(&[0x00, 0x00]);
         // Source
         to_return.extend_from_slice(&ipv4.source.octets());
         // Destination
         to_return.extend_from_slice(&ipv4.destination.octets());
 
+        // Change byte 6 and 7 to the length of the payload
+        to_return[2] = (84 >> 8) as u8;
+        to_return[3] = (84 & 0xFF) as u8;
+
+        // Calculate the checksum
+        let checksum = ipv4_checksum(&to_return);
+        to_return[10] = (checksum >> 8) as u8;
+        to_return[11] = (checksum & 0xFF) as u8;
+
         // Payload
         to_return.extend_from_slice(&ipv4.payload);
-
-        // Change byte 6 and 7 to the length of the payload
-        to_return[2] = (to_return.len() >> 8) as u8;
-        to_return[3] = (to_return.len() & 0xFF) as u8;
 
         to_return
     }
@@ -118,4 +123,28 @@ fn finalize_checksum(mut sum: u32) -> u16 {
         sum = (sum >> 16) + (sum & 0xFFFF);
     }
     !sum as u16
+}
+
+/// Calculate the checksum for an IPv4 packet.
+pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
+    use byteorder::{BigEndian, ReadBytesExt};
+    use std::io::Cursor;
+
+    let mut result = 0xffffu32;
+    let mut buffer = Cursor::new(buffer);
+
+    while let Ok(value) = buffer.read_u16::<BigEndian>() {
+        // Skip checksum field.
+        if buffer.position() == 12 {
+            continue;
+        }
+
+        result += value as u32;
+
+        if result > 0xffff {
+            result -= 0xffff;
+        }
+    }
+
+    !result as u16
 }

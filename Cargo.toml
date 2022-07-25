@@ -11,6 +11,7 @@ boringtun = { version = "*" }
 etherparse = { version = "*" }
 smoltcp = { version = "*" }
 rand = { version = "*" }
+byteorder = { version = "*" }
 
 [[bin]]
 name = "yeet"
