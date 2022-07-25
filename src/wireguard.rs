@@ -105,13 +105,16 @@ fn wg_thread(socket: std::net::UdpSocket) {
                                 etherparse::Icmpv4Type::EchoRequest(header) => header.id,
                                 _ => unimplemented!(),
                             },
-                            sequence_number: 5,
+                            sequence_number: match ping_send.header().icmp_type {
+                                etherparse::Icmpv4Type::EchoRequest(header) => header.seq,
+                                _ => unimplemented!(),
+                            },
                             data: ping_send.payload().to_vec(),
                         }
                         .into();
 
                         let ip_packet: Vec<u8> = packets::Ipv4 {
-                            id: 69,
+                            id: std::process::id() as u16,
                             ttl: 64,
                             protocol: 1,
                             source: match ip_packet.ip.unwrap() {

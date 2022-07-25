@@ -62,10 +62,6 @@ impl From<Icmp> for Vec<u8> {
         to_return.extend_from_slice(&icmp.identifier.to_be_bytes());
         // Sequence number
         to_return.extend_from_slice(&icmp.sequence_number.to_be_bytes());
-        // Timestamp
-        let now = std::time::SystemTime::now();
-        let timestamp = now.duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
-        to_return.extend_from_slice(&timestamp.to_be_bytes());
         // Data
         to_return.extend_from_slice(&icmp.data);
 
