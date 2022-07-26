@@ -78,6 +78,10 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
     // Create hashmap for the handles to ports
     let mut handles: HashMap<u16, handle::InternalHandle> = std::collections::HashMap::new();
 
+    // Global IP addresses to be filled in by the first packet
+    let mut self_ip = None;
+    let mut peer_ip = None;
+
     socket
         .set_read_timeout(Some(std::time::Duration::from_millis(50)))
         .unwrap();
@@ -87,6 +91,14 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
         let mut buf = [0; 1024];
         match socket.recv_from(&mut buf) {
             Ok((size, endpoint)) => {
+                // Fill in the peer IP if it's the first packet
+                if peer_ip.is_none() {
+                    peer_ip = Some(match endpoint {
+                        SocketAddr::V4(addr) => addr,
+                        _ => panic!("Unexpected IP type"),
+                    });
+                }
+
                 let raw_buf = buf[..size].to_vec();
 
                 // Parse it with boringtun
@@ -121,6 +133,10 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         println!("Parsing IP packet");
                         println!("Bytes: {:02X?}", b);
                         println!("Address: {:?}", addr);
+                        // Fill in the self IP if it's the first packet
+                        if self_ip.is_none() {
+                            self_ip = Some(addr);
+                        }
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();
 
                         // Handle the packet
@@ -190,6 +206,11 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
             },
         };
 
+        // We can't continue without finding ourselves
+        if self_ip == None || peer_ip == None {
+            continue;
+        }
+
         // Try to get a message from the channel
         match receiver.try_recv() {
             Ok(event) => {
@@ -215,6 +236,42 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                             seq: 0,
                             ack: 0,
                         };
+
+                        // Create TCP syn packet
+                        let tcp_packet = packets::Tcp {
+                            source_port: port,
+                            destination_port: external_port,
+                            sequence_number: 0,
+                            ack_number: 0,
+                            data_offset: 5,
+                            reserved: 0,
+                            flags: 0x02,
+                            window_size: 0xFFFF,
+                            urgent_pointer: 0,
+                            data: vec![],
+                        };
+
+                        // Create IP packet
+                        let ip_packet: Vec<u8> = packets::Ipv4 {
+                            id: std::process::id() as u16,
+                            ttl: 64,
+                            protocol: 6,
+                            source: self_ip.unwrap(),
+                            destination: *peer_ip.unwrap().ip(),
+                            payload: tcp_packet.into(),
+                        }
+                        .into();
+
+                        println!("Sending TCP packet: {:02X?}", ip_packet);
+                        let mut buf = [0; 2048];
+                        match tun.encapsulate(&ip_packet, &mut buf) {
+                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                socket.send_to(b, peer_ip.unwrap()).unwrap();
+                            }
+                            _ => {
+                                println!("Unexpected result");
+                            }
+                        }
 
                         handle.outgoing.send(event::Event::Port(port)).unwrap();
 

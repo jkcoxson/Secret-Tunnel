@@ -18,6 +18,12 @@ fn main() {
         51820,
     ));
 
+    // Wait until the user presses enter
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).unwrap();
+    println!("{}", input);
+
+    println!("Connecting");
     wg.tcp_connect(3000);
     println!("Connected?");
 

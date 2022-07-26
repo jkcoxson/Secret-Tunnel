@@ -79,6 +79,55 @@ impl From<Icmp> for Vec<u8> {
     }
 }
 
+pub(crate) struct Tcp {
+    pub(crate) source_port: u16,
+    pub(crate) destination_port: u16,
+    pub(crate) sequence_number: u64,
+    pub(crate) ack_number: u64,
+    pub(crate) data_offset: u8,
+    pub(crate) reserved: u8,
+    pub(crate) flags: u16,
+    pub(crate) window_size: u16,
+    pub(crate) urgent_pointer: u16,
+    pub(crate) data: Vec<u8>,
+}
+
+impl From<Tcp> for Vec<u8> {
+    fn from(tcp: Tcp) -> Vec<u8> {
+        let mut to_return = vec![];
+
+        // Source port
+        to_return.extend_from_slice(&tcp.source_port.to_be_bytes());
+        // Destination port
+        to_return.extend_from_slice(&tcp.destination_port.to_be_bytes());
+        // Sequence number
+        to_return.extend_from_slice(&tcp.sequence_number.to_be_bytes());
+        // Ack number
+        to_return.extend_from_slice(&tcp.ack_number.to_be_bytes());
+        // Data offset
+        to_return.push(tcp.data_offset);
+        // Reserved
+        to_return.push(tcp.reserved);
+        // Flags
+        to_return.extend_from_slice(&tcp.flags.to_be_bytes());
+        // Window size
+        to_return.extend_from_slice(&tcp.window_size.to_be_bytes());
+        // Checksum - left as 0 and filled in later
+        to_return.extend_from_slice(&[0x00, 0x00]);
+        // Urgent pointer
+        to_return.extend_from_slice(&tcp.urgent_pointer.to_be_bytes());
+        // Data
+        to_return.extend_from_slice(&tcp.data);
+
+        // Calculate the checksum
+        let checksum = tcp_checksum(&to_return);
+        to_return[16] = (checksum >> 8) as u8;
+        to_return[17] = (checksum & 0xFF) as u8;
+
+        to_return
+    }
+}
+
 /// Sum all words (16 bit chunks) in the given data. The word at word offset
 /// `skipword` will be skipped. Each word is treated as big endian.
 /// Stolen from https://docs.rs/pnet_packet/0.31.0/src/pnet_packet/util.rs.html with minor modifications
@@ -139,6 +188,24 @@ pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
             continue;
         }
 
+        result += value as u32;
+
+        if result > 0xffff {
+            result -= 0xffff;
+        }
+    }
+
+    !result as u16
+}
+
+fn tcp_checksum(buffer: &[u8]) -> u16 {
+    use byteorder::{BigEndian, ReadBytesExt};
+    use std::io::Cursor;
+
+    let mut result = 0xffffu32;
+    let mut buffer = Cursor::new(buffer);
+
+    while let Ok(value) = buffer.read_u16::<BigEndian>() {
         result += value as u32;
 
         if result > 0xffff {
