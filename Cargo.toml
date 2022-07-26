@@ -12,6 +12,7 @@ etherparse = { version = "*" }
 smoltcp = { version = "*" }
 rand = { version = "*" }
 byteorder = { version = "*" }
+crossbeam-channel = { version = "*" }
 
 [[bin]]
 name = "yeet"

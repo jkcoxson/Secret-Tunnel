@@ -1,5 +1,7 @@
 // Authored by Jackson Coxson
 
+pub mod event;
+pub mod handle;
 pub mod packets;
 pub mod wireguard;
 
