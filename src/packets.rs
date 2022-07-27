@@ -86,10 +86,52 @@ pub(crate) struct Tcp {
     pub(crate) ack_number: u64,
     pub(crate) data_offset: u8,
     pub(crate) reserved: u8,
-    pub(crate) flags: u16,
+    pub(crate) flags: u8,
     pub(crate) window_size: u16,
     pub(crate) urgent_pointer: u16,
     pub(crate) data: Vec<u8>,
+}
+
+pub(crate) struct TcpFlags {
+    pub(crate) fin: bool,
+    pub(crate) syn: bool,
+    pub(crate) rst: bool,
+    pub(crate) psh: bool,
+    pub(crate) ack: bool,
+    pub(crate) urg: bool,
+    pub(crate) ece: bool,
+    pub(crate) cwr: bool,
+}
+
+impl From<TcpFlags> for u8 {
+    fn from(flags: TcpFlags) -> u8 {
+        let mut to_return = 0;
+        if flags.fin {
+            to_return |= 1 << 0;
+        }
+        if flags.syn {
+            to_return |= 1 << 1;
+        }
+        if flags.rst {
+            to_return |= 1 << 2;
+        }
+        if flags.psh {
+            to_return |= 1 << 3;
+        }
+        if flags.ack {
+            to_return |= 1 << 4;
+        }
+        if flags.urg {
+            to_return |= 1 << 5;
+        }
+        if flags.ece {
+            to_return |= 1 << 6;
+        }
+        if flags.cwr {
+            to_return |= 1 << 7;
+        }
+        to_return
+    }
 }
 
 impl From<Tcp> for Vec<u8> {
