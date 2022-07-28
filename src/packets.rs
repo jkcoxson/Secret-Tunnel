@@ -34,7 +34,6 @@ impl From<Ipv4> for Vec<u8> {
         to_return.extend_from_slice(&ipv4.destination.octets());
 
         // Change byte 2 and 3 to the length of the payload
-        println!("IPv4 payload length: {}", to_return.len());
         to_return[2] = ((to_return.len() + ipv4.payload.len()) >> 8) as u8;
         to_return[3] = ((to_return.len() + ipv4.payload.len()) & 0xFF) as u8;
 
