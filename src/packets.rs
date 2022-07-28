@@ -33,9 +33,10 @@ impl From<Ipv4> for Vec<u8> {
         // Destination
         to_return.extend_from_slice(&ipv4.destination.octets());
 
-        // Change byte 6 and 7 to the length of the payload
-        to_return[2] = (84 >> 8) as u8;
-        to_return[3] = (84 & 0xFF) as u8;
+        // Change byte 2 and 3 to the length of the payload
+        println!("IPv4 payload length: {}", to_return.len());
+        to_return[2] = ((to_return.len() + ipv4.payload.len()) >> 8) as u8;
+        to_return[3] = ((to_return.len() + ipv4.payload.len()) & 0xFF) as u8;
 
         // Calculate the checksum
         let checksum = ipv4_checksum(&to_return);
@@ -160,7 +161,9 @@ impl From<Tcp> for Vec<u8> {
         to_return.extend_from_slice(&tcp.data);
 
         // Fill in the data offset as the first half of the byte
-        to_return[12] = (to_return.len() / 32) as u8;
+        // 0-3 bits are the size, 4-7 are reserved
+        println!("Len: {}", to_return.len());
+        to_return[12] = ((to_return.len() / 4) << 4) as u8;
 
         // Calculate the checksum
         let checksum = tcp_checksum(&to_return);
