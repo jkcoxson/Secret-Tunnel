@@ -86,13 +86,10 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
     let mut self_ip = None;
     let mut peer_ip = None;
 
-    socket
-        .set_read_timeout(Some(std::time::Duration::from_millis(50)))
-        .unwrap();
-
     loop {
         // Try to get a message from Wireguard
         let mut buf = [0; 1024];
+        socket.set_nonblocking(true).unwrap();
         match socket.recv_from(&mut buf) {
             Ok((size, endpoint)) => {
                 // Fill in the peer IP if it's the first packet
@@ -204,7 +201,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                 }
             }
             Err(e) => match e.kind() {
-                std::io::ErrorKind::WouldBlock => continue,
+                std::io::ErrorKind::WouldBlock => {}
                 _ => {
                     println!("Error receiving: {}", e);
                     return;
