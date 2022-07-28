@@ -9,17 +9,17 @@ pub struct PortHandle {
     pub incoming: crossbeam_channel::Receiver<Event>,
 }
 
-pub enum InternalHandle {
+pub(crate) enum InternalHandle {
     Tcp(TcpInternal),
 }
 
-pub struct TcpInternal {
+pub(crate) struct TcpInternal {
     /// The target port
-    pub port: u16,
+    pub(crate) port: u16,
     /// The channel to send events to
-    pub outgoing: crossbeam_channel::Sender<Event>,
+    pub(crate) outgoing: crossbeam_channel::Sender<Event>,
     /// Sequence number for the next packet
-    pub seq: u64,
+    pub(crate) seq: u64,
     /// Ack number for the next packet
-    pub ack: u64,
+    pub(crate) ack: u64,
 }

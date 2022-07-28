@@ -85,6 +85,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
     // Global IP addresses to be filled in by the first packet
     let mut self_ip = None;
     let mut peer_ip = None;
+    let mut peer_vpn_ip = None;
 
     loop {
         // Try to get a message from Wireguard
@@ -137,12 +138,21 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         println!("Parsing IP packet");
                         println!("Bytes: {:02X?}", b);
                         println!("Address: {:?}", addr);
-                        // Fill in the self IP if it's the first packet
-                        if self_ip.is_none() {
-                            println!("Filling in self IP");
-                            self_ip = Some(addr);
-                        }
+
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();
+
+                        let incoming_ip = match ip_packet.ip.unwrap() {
+                            etherparse::InternetSlice::Ipv4(a, _) => a,
+                            etherparse::InternetSlice::Ipv6(_, _) => panic!("IPv6 not supported"),
+                        };
+                        if peer_vpn_ip.is_none() {
+                            println!("Filling in peer VPN IP: {:?}", incoming_ip.source_addr());
+                            peer_vpn_ip = Some(incoming_ip.source_addr());
+                        }
+                        if self_ip.is_none() {
+                            println!("Filling in self IP: {:?}", incoming_ip.destination_addr());
+                            self_ip = Some(incoming_ip.destination_addr());
+                        }
 
                         // Handle the packet
                         match ip_packet.transport.unwrap() {
@@ -167,14 +177,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                     id: std::process::id() as u16,
                                     ttl: 64,
                                     protocol: 1,
-                                    source: match ip_packet.ip.unwrap() {
-                                        etherparse::InternetSlice::Ipv4(s, _) => {
-                                            s.destination_addr()
-                                        }
-                                        etherparse::InternetSlice::Ipv6(_, _) => {
-                                            panic!("IPv6 not supported")
-                                        }
-                                    },
+                                    source: incoming_ip.destination_addr(),
                                     destination: addr,
                                     payload: ping_return_packet,
                                 }
@@ -212,7 +215,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
         };
 
         // We can't continue without finding ourselves
-        if self_ip == None || peer_ip == None {
+        if self_ip == None || peer_ip == None || peer_vpn_ip == None {
             continue;
         }
 
@@ -251,6 +254,12 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                             flags: 0x02,
                             window_size: 0xFFFF,
                             urgent_pointer: 0,
+                            pseudo_header: packets::PseudoHeader {
+                                source: self_ip.unwrap(),
+                                destination: peer_vpn_ip.unwrap(),
+                                protocol: 6,
+                                length: 0,
+                            },
                             data: vec![],
                         };
 
@@ -260,7 +269,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                             ttl: 64,
                             protocol: 6,
                             source: self_ip.unwrap(),
-                            destination: *peer_ip.unwrap().ip(),
+                            destination: peer_vpn_ip.unwrap(),
                             payload: tcp_packet.into(),
                         }
                         .into();

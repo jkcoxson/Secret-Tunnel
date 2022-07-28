@@ -87,6 +87,7 @@ pub(crate) struct Tcp {
     pub(crate) flags: u8,
     pub(crate) window_size: u16,
     pub(crate) urgent_pointer: u16,
+    pub(crate) pseudo_header: PseudoHeader,
     pub(crate) data: Vec<u8>,
 }
 
@@ -99,6 +100,13 @@ pub(crate) struct TcpFlags {
     pub(crate) urg: bool,
     pub(crate) ece: bool,
     pub(crate) cwr: bool,
+}
+
+pub(crate) struct PseudoHeader {
+    pub(crate) source: std::net::Ipv4Addr,
+    pub(crate) destination: std::net::Ipv4Addr,
+    pub(crate) protocol: u8,
+    pub(crate) length: u16,
 }
 
 impl From<TcpFlags> for u8 {
@@ -128,6 +136,25 @@ impl From<TcpFlags> for u8 {
         if flags.cwr {
             to_return |= 1 << 7;
         }
+        to_return
+    }
+}
+
+impl From<PseudoHeader> for Vec<u8> {
+    fn from(pseudo_header: PseudoHeader) -> Vec<u8> {
+        let mut to_return = vec![];
+
+        // Source
+        to_return.extend_from_slice(&pseudo_header.source.octets());
+        // Destination
+        to_return.extend_from_slice(&pseudo_header.destination.octets());
+        // Reserved
+        to_return.push(0x00);
+        // Protocol
+        to_return.push(pseudo_header.protocol);
+        // Length
+        to_return.extend_from_slice(&pseudo_header.length.to_be_bytes());
+
         to_return
     }
 }
@@ -164,8 +191,10 @@ impl From<Tcp> for Vec<u8> {
         println!("Len: {}", to_return.len());
         to_return[12] = ((to_return.len() / 4) << 4) as u8;
 
-        // Calculate the checksum
-        let checksum = tcp_checksum(&to_return);
+        // Create the data for the checksum
+        let mut checksum: Vec<u8> = tcp.pseudo_header.into();
+        checksum.extend_from_slice(&to_return);
+        let checksum = ipv4_checksum(&checksum) - 0x14;
         to_return[16] = (checksum >> 8) as u8;
         to_return[17] = (checksum & 0xFF) as u8;
 
@@ -243,7 +272,7 @@ pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
     !result as u16
 }
 
-pub(crate) fn tcp_checksum(buffer: &[u8]) -> u16 {
+pub(crate) fn _tcp_checksum(buffer: &[u8]) -> u16 {
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::Cursor;
 
