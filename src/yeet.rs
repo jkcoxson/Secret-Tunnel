@@ -24,7 +24,7 @@ fn main() {
     println!("{}", input);
 
     println!("Connecting");
-    wg.tcp_connect(3000);
+    wg.tcp_connect(3000).unwrap();
     println!("Connected?");
 
     loop {

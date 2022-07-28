@@ -29,7 +29,9 @@ impl Wireguard {
     }
 
     /// Opens a new TCP connection
-    pub fn tcp_connect(&self, port: u16) -> handle::PortHandle {
+    pub fn tcp_connect(&self, port: u16) -> Result<handle::PortHandle, std::io::Error> {
+        println!("Connecting to port {}", port);
+
         // Create a channel to send events to
         let (sender, receiver) = crossbeam_channel::unbounded();
 
@@ -39,19 +41,21 @@ impl Wireguard {
             .unwrap();
 
         // Wait to get the internal port
+        println!("Waiting for handle");
         let internal_port = match receiver.recv().unwrap() {
             event::Event::Port(port) => port,
-            _ => panic!("Unexpected event"),
+            event::Event::Error(err) => return Err(err),
+            _ => unreachable!(),
         };
 
         println!("Internal port: {}", internal_port);
 
         // Return the handle
-        handle::PortHandle {
+        Ok(handle::PortHandle {
             port: internal_port,
             outgoing: self.sender.clone(),
             incoming: receiver,
-        }
+        })
     }
 }
 
@@ -93,6 +97,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
             Ok((size, endpoint)) => {
                 // Fill in the peer IP if it's the first packet
                 if peer_ip.is_none() {
+                    println!("Filling in peer IP");
                     peer_ip = Some(match endpoint {
                         SocketAddr::V4(addr) => addr,
                         _ => panic!("Unexpected IP type"),
@@ -135,6 +140,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         println!("Address: {:?}", addr);
                         // Fill in the self IP if it's the first packet
                         if self_ip.is_none() {
+                            println!("Filling in self IP");
                             self_ip = Some(addr);
                         }
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();
@@ -243,8 +249,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                             destination_port: external_port,
                             sequence_number: 0,
                             ack_number: 0,
-                            data_offset: 5,
-                            reserved: 0,
                             flags: 0x02,
                             window_size: 0xFFFF,
                             urgent_pointer: 0,

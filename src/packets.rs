@@ -82,10 +82,8 @@ impl From<Icmp> for Vec<u8> {
 pub(crate) struct Tcp {
     pub(crate) source_port: u16,
     pub(crate) destination_port: u16,
-    pub(crate) sequence_number: u64,
-    pub(crate) ack_number: u64,
-    pub(crate) data_offset: u8,
-    pub(crate) reserved: u8,
+    pub(crate) sequence_number: u32,
+    pub(crate) ack_number: u32,
     pub(crate) flags: u8,
     pub(crate) window_size: u16,
     pub(crate) urgent_pointer: u16,
@@ -146,20 +144,23 @@ impl From<Tcp> for Vec<u8> {
         to_return.extend_from_slice(&tcp.sequence_number.to_be_bytes());
         // Ack number
         to_return.extend_from_slice(&tcp.ack_number.to_be_bytes());
-        // Data offset
-        to_return.push(tcp.data_offset);
-        // Reserved
-        to_return.push(tcp.reserved);
+
+        // Data offset + Reserved - left as 0 for now
+        to_return.push(0x00);
         // Flags
-        to_return.extend_from_slice(&tcp.flags.to_be_bytes());
+        to_return.push(tcp.flags);
         // Window size
         to_return.extend_from_slice(&tcp.window_size.to_be_bytes());
+
         // Checksum - left as 0 and filled in later
         to_return.extend_from_slice(&[0x00, 0x00]);
         // Urgent pointer
         to_return.extend_from_slice(&tcp.urgent_pointer.to_be_bytes());
         // Data
         to_return.extend_from_slice(&tcp.data);
+
+        // Fill in the data offset as the first half of the byte
+        to_return[12] = (to_return.len() / 32) as u8;
 
         // Calculate the checksum
         let checksum = tcp_checksum(&to_return);
@@ -240,7 +241,7 @@ pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
     !result as u16
 }
 
-fn tcp_checksum(buffer: &[u8]) -> u16 {
+pub(crate) fn tcp_checksum(buffer: &[u8]) -> u16 {
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::Cursor;
 
