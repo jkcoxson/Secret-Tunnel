@@ -12,6 +12,8 @@ pub enum Event {
     Error(std::io::Error),
     /// Port return
     Port(u16),
+    /// Connection closed
+    Closed,
     /// Stop all threads
     Stop,
 }

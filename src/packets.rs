@@ -84,7 +84,7 @@ pub(crate) struct Tcp {
     pub(crate) destination_port: u16,
     pub(crate) sequence_number: u32,
     pub(crate) ack_number: u32,
-    pub(crate) flags: u8,
+    pub(crate) flags: TcpFlags,
     pub(crate) window_size: u16,
     pub(crate) urgent_pointer: u16,
     pub(crate) pseudo_header: PseudoHeader,
@@ -175,7 +175,7 @@ impl From<Tcp> for Vec<u8> {
         // Data offset + Reserved - left as 0 for now
         to_return.push(0x00);
         // Flags
-        to_return.push(tcp.flags);
+        to_return.push(tcp.flags.into());
         // Window size
         to_return.extend_from_slice(&tcp.window_size.to_be_bytes());
 

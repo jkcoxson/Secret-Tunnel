@@ -19,7 +19,7 @@ pub(crate) struct TcpInternal {
     /// The channel to send events to
     pub(crate) outgoing: crossbeam_channel::Sender<Event>,
     /// Sequence number for the next packet
-    pub(crate) seq: u64,
+    pub(crate) seq: u32,
     /// Ack number for the next packet
-    pub(crate) ack: u64,
+    pub(crate) ack: u32,
 }

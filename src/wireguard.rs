@@ -196,7 +196,76 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                             }
                             etherparse::TransportSlice::Icmpv6(_) => unimplemented!(),
                             etherparse::TransportSlice::Udp(_) => todo!(),
-                            etherparse::TransportSlice::Tcp(_) => todo!(),
+                            etherparse::TransportSlice::Tcp(tcp_packet) => {
+                                // Determine if the destination is a port we're listening on
+                                let destination_port = tcp_packet.destination_port();
+                                if handles.contains_key(&destination_port) {
+                                    println!("Handling TCP packet");
+                                    let handle = handles.get_mut(&destination_port).unwrap();
+                                    let handle = match handle {
+                                        handle::InternalHandle::Tcp(h) => h,
+                                        #[allow(unreachable_patterns)]
+                                        _ => panic!(),
+                                    };
+
+                                    // Update the ack and seq numbers
+                                    handle.ack = tcp_packet.sequence_number() + 1;
+                                    handle.seq = tcp_packet.acknowledgment_number();
+
+                                    // Opening a connection
+                                    if tcp_packet.syn() {
+                                        // Ack it
+
+                                        let send_tcp = packets::Tcp {
+                                            source_port: tcp_packet.destination_port(),
+                                            destination_port: handle.port,
+                                            sequence_number: handle.seq,
+                                            window_size: tcp_packet.window_size(),
+                                            urgent_pointer: tcp_packet.urgent_pointer(),
+                                            ack_number: handle.ack,
+                                            flags: packets::TcpFlags {
+                                                fin: false,
+                                                syn: false,
+                                                rst: false,
+                                                psh: false,
+                                                ack: true,
+                                                urg: false,
+                                                ece: false,
+                                                cwr: false,
+                                            },
+                                            pseudo_header: packets::PseudoHeader {
+                                                source: self_ip.unwrap(),
+                                                destination: peer_vpn_ip.unwrap(),
+                                                protocol: 6,
+                                                length: 0,
+                                            },
+                                            data: vec![],
+                                        };
+
+                                        let ip_packet: Vec<u8> = packets::Ipv4 {
+                                            id: std::process::id() as u16,
+                                            ttl: 64,
+                                            protocol: 6,
+                                            source: self_ip.unwrap(),
+                                            destination: peer_vpn_ip.unwrap(),
+                                            payload: send_tcp.into(),
+                                        }
+                                        .into();
+
+                                        let mut buf = [0; 2048];
+                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, endpoint).unwrap();
+                                            }
+                                            _ => {
+                                                println!("Unexpected result");
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    println!("Unknown port: {}", destination_port);
+                                }
+                            }
                             etherparse::TransportSlice::Unknown(_) => todo!(),
                         }
                     }
@@ -251,7 +320,16 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                             destination_port: external_port,
                             sequence_number: 0,
                             ack_number: 0,
-                            flags: 0x02,
+                            flags: packets::TcpFlags {
+                                fin: false,
+                                syn: true,
+                                rst: false,
+                                psh: false,
+                                ack: false,
+                                urg: false,
+                                ece: false,
+                                cwr: false,
+                            },
                             window_size: 0xFFFF,
                             urgent_pointer: 0,
                             pseudo_header: packets::PseudoHeader {
@@ -290,12 +368,12 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         // Add it to the hashmap
                         handles.insert(port, handle::InternalHandle::Tcp(handle));
                     }
-                    event::Event::Error(_) | event::Event::Port(_) => {
-                        println!("This should never happen, errors only go out");
-                    }
                     event::Event::Stop => {
                         println!("Stopping Wireguard server...");
                         return;
+                    }
+                    _ => {
+                        println!("This should never happen, errors only go out");
                     }
                 }
             }
