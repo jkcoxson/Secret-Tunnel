@@ -321,6 +321,53 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                             }
                                         }
 
+                                        // Send a fin back to the server
+                                        let send_tcp = packets::Tcp {
+                                            source_port: tcp_packet.destination_port(),
+                                            destination_port: handle.port,
+                                            sequence_number: handle.seq,
+                                            window_size: tcp_packet.window_size(),
+                                            urgent_pointer: tcp_packet.urgent_pointer(),
+                                            ack_number: handle.ack,
+                                            flags: packets::TcpFlags {
+                                                fin: true,
+                                                syn: false,
+                                                rst: false,
+                                                psh: false,
+                                                ack: true,
+                                                urg: false,
+                                                ece: false,
+                                                cwr: false,
+                                            },
+                                            pseudo_header: packets::PseudoHeader {
+                                                source: self_ip.unwrap(),
+                                                destination: peer_vpn_ip.unwrap(),
+                                                protocol: 6,
+                                                length: 0,
+                                            },
+                                            data: vec![],
+                                        };
+
+                                        let ip_packet: Vec<u8> = packets::Ipv4 {
+                                            id: std::process::id() as u16,
+                                            ttl: 64,
+                                            protocol: 6,
+                                            source: self_ip.unwrap(),
+                                            destination: peer_vpn_ip.unwrap(),
+                                            payload: send_tcp.into(),
+                                        }
+                                        .into();
+
+                                        let mut buf = [0; 2048];
+                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, endpoint).unwrap();
+                                            }
+                                            _ => {
+                                                println!("Unexpected result");
+                                            }
+                                        }
+
                                         // Send the close event to the handle
                                         let _ = handle.outgoing.send(event::Event::Closed);
                                     }

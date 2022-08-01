@@ -23,9 +23,7 @@ fn main() {
     std::io::stdin().read_line(&mut input).unwrap();
     println!("{}", input);
 
-    println!("Connecting");
     let handle = wg.tcp_connect(3000).unwrap();
-    println!("Connecteds");
 
     handle
         .send("The cake is a freaking lie".as_bytes().to_vec())

@@ -18,9 +18,9 @@ impl PortHandle {
     pub fn try_recv(&self) -> Result<Event, TryRecvError> {
         self.incoming.try_recv()
     }
-    pub fn send(&self, event: Vec<u8>) -> Result<(), SendError<Event>> {
+    pub fn send(&self, payload: Vec<u8>) -> Result<(), SendError<Event>> {
         self.outgoing
-            .send(Event::Transport(self.internal_port, event))
+            .send(Event::Transport(self.internal_port, payload))
     }
     pub fn close(&self) {
         self.outgoing.send(Event::Closed).unwrap();
