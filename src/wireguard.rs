@@ -52,7 +52,8 @@ impl Wireguard {
 
         // Return the handle
         Ok(handle::PortHandle {
-            port: internal_port,
+            internal_port,
+            external_port: port,
             outgoing: self.sender.clone(),
             incoming: receiver,
         })
@@ -195,7 +196,9 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                 }
                             }
                             etherparse::TransportSlice::Icmpv6(_) => unimplemented!(),
-                            etherparse::TransportSlice::Udp(_) => todo!(),
+                            etherparse::TransportSlice::Udp(_) => {
+                                println!("UDP not implemented");
+                            }
                             etherparse::TransportSlice::Tcp(tcp_packet) => {
                                 // Determine if the destination is a port we're listening on
                                 let destination_port = tcp_packet.destination_port();
@@ -205,7 +208,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                     let handle = match handle {
                                         handle::InternalHandle::Tcp(h) => h,
                                         #[allow(unreachable_patterns)]
-                                        _ => panic!(),
+                                        _ => continue, // wrong protocol
                                     };
 
                                     // Update the ack and seq numbers
@@ -321,6 +324,68 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                         // Send the close event to the handle
                                         let _ = handle.outgoing.send(event::Event::Closed);
                                     }
+
+                                    // Receiving data
+                                    if tcp_packet.psh() {
+                                        // Send the data to the handle
+                                        handle
+                                            .outgoing
+                                            .send(event::Event::Transport(
+                                                0,
+                                                ip_packet.payload.to_vec(),
+                                            ))
+                                            .unwrap();
+
+                                        // Add the length of the packet to the ack number
+                                        handle.ack += ip_packet.payload.len() as u32;
+
+                                        // Ack it
+                                        let send_tcp = packets::Tcp {
+                                            source_port: tcp_packet.destination_port(),
+                                            destination_port: handle.port,
+                                            sequence_number: handle.seq,
+                                            window_size: tcp_packet.window_size(),
+                                            urgent_pointer: tcp_packet.urgent_pointer(),
+                                            ack_number: handle.ack,
+                                            flags: packets::TcpFlags {
+                                                fin: false,
+                                                syn: false,
+                                                rst: false,
+                                                psh: false,
+                                                ack: true,
+                                                urg: false,
+                                                ece: false,
+                                                cwr: false,
+                                            },
+                                            pseudo_header: packets::PseudoHeader {
+                                                source: self_ip.unwrap(),
+                                                destination: peer_vpn_ip.unwrap(),
+                                                protocol: 6,
+                                                length: 0,
+                                            },
+                                            data: vec![],
+                                        };
+
+                                        let ip_packet: Vec<u8> = packets::Ipv4 {
+                                            id: std::process::id() as u16,
+                                            ttl: 64,
+                                            protocol: 6,
+                                            source: self_ip.unwrap(),
+                                            destination: peer_vpn_ip.unwrap(),
+                                            payload: send_tcp.into(),
+                                        }
+                                        .into();
+
+                                        let mut buf = [0; 2048];
+                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, endpoint).unwrap();
+                                            }
+                                            _ => {
+                                                println!("Unexpected result");
+                                            }
+                                        }
+                                    }
                                 } else {
                                     println!("Unknown port: {}", destination_port);
                                 }
@@ -352,7 +417,66 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
             Ok(event) => {
                 println!("Got event: {:?}", event);
                 match event {
-                    event::Event::Transport(_, _) => todo!(),
+                    event::Event::Transport(internal_port, data) => {
+                        // Look up the handle
+                        let handle = match handles.get_mut(&internal_port) {
+                            Some(handle) => handle,
+                            None => {
+                                println!("Unknown port: {}", internal_port);
+                                continue;
+                            }
+                        };
+
+                        match handle {
+                            handle::InternalHandle::Tcp(handle) => {
+                                let tcp_packet = packets::Tcp {
+                                    source_port: internal_port,
+                                    destination_port: handle.port,
+                                    sequence_number: handle.seq,
+                                    window_size: 65535,
+                                    urgent_pointer: 0,
+                                    ack_number: handle.ack,
+                                    flags: packets::TcpFlags {
+                                        fin: false,
+                                        syn: false,
+                                        rst: false,
+                                        psh: true,
+                                        ack: true,
+                                        urg: false,
+                                        ece: false,
+                                        cwr: false,
+                                    },
+                                    pseudo_header: packets::PseudoHeader {
+                                        source: self_ip.unwrap(),
+                                        destination: peer_vpn_ip.unwrap(),
+                                        protocol: 6,
+                                        length: data.len() as u16,
+                                    },
+                                    data,
+                                };
+
+                                let ip_packet: Vec<u8> = packets::Ipv4 {
+                                    id: std::process::id() as u16,
+                                    ttl: 64,
+                                    protocol: 6,
+                                    source: self_ip.unwrap(),
+                                    destination: peer_vpn_ip.unwrap(),
+                                    payload: tcp_packet.into(),
+                                }
+                                .into();
+
+                                let mut buf = [0; 2048];
+                                match tun.encapsulate(&ip_packet, &mut buf) {
+                                    boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                        socket.send_to(b, peer_ip.unwrap()).unwrap();
+                                    }
+                                    _ => {
+                                        println!("Unexpected result");
+                                    }
+                                }
+                            }
+                        }
+                    }
                     event::Event::NewTcp(external_port, sender) => {
                         println!("Establishing new TCP connection");
 
@@ -395,7 +519,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                 source: self_ip.unwrap(),
                                 destination: peer_vpn_ip.unwrap(),
                                 protocol: 6,
-                                length: 0,
+                                length: 20,
                             },
                             data: vec![],
                         };

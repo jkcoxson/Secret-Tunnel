@@ -24,11 +24,14 @@ fn main() {
     println!("{}", input);
 
     println!("Connecting");
-    wg.tcp_connect(3000).unwrap();
-    println!("Connected?");
+    let handle = wg.tcp_connect(3000).unwrap();
+    println!("Connecteds");
+
+    handle
+        .send("The cake is a freaking lie".as_bytes().to_vec())
+        .unwrap();
 
     loop {
-        // sleep
-        std::thread::sleep(std::time::Duration::from_secs(1));
+        println!("{:?}", handle.recv().unwrap());
     }
 }

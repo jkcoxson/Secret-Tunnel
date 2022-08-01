@@ -1,12 +1,30 @@
 // Jackson Coxson
 
+use crossbeam_channel::{RecvError, SendError, TryRecvError};
+
 use crate::event::Event;
 
 pub struct PortHandle {
-    // The internal port
-    pub port: u16,
+    pub internal_port: u16,
+    pub external_port: u16,
     pub outgoing: crossbeam_channel::Sender<Event>,
     pub incoming: crossbeam_channel::Receiver<Event>,
+}
+
+impl PortHandle {
+    pub fn recv(&self) -> Result<Event, RecvError> {
+        self.incoming.recv()
+    }
+    pub fn try_recv(&self) -> Result<Event, TryRecvError> {
+        self.incoming.try_recv()
+    }
+    pub fn send(&self, event: Vec<u8>) -> Result<(), SendError<Event>> {
+        self.outgoing
+            .send(Event::Transport(self.internal_port, event))
+    }
+    pub fn close(&self) {
+        self.outgoing.send(Event::Closed).unwrap();
+    }
 }
 
 pub(crate) enum InternalHandle {

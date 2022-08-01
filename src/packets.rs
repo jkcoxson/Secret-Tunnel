@@ -91,6 +91,7 @@ pub(crate) struct Tcp {
     pub(crate) data: Vec<u8>,
 }
 
+#[derive(Clone)]
 pub(crate) struct TcpFlags {
     pub(crate) fin: bool,
     pub(crate) syn: bool,
@@ -175,7 +176,7 @@ impl From<Tcp> for Vec<u8> {
         // Data offset + Reserved - left as 0 for now
         to_return.push(0x00);
         // Flags
-        to_return.push(tcp.flags.into());
+        to_return.push(tcp.flags.clone().into());
         // Window size
         to_return.extend_from_slice(&tcp.window_size.to_be_bytes());
 
@@ -183,18 +184,21 @@ impl From<Tcp> for Vec<u8> {
         to_return.extend_from_slice(&[0x00, 0x00]);
         // Urgent pointer
         to_return.extend_from_slice(&tcp.urgent_pointer.to_be_bytes());
-        // Data
-        to_return.extend_from_slice(&tcp.data);
 
         // Fill in the data offset as the first half of the byte
         // 0-3 bits are the size, 4-7 are reserved
-        println!("Len: {}", to_return.len());
         to_return[12] = ((to_return.len() / 4) << 4) as u8;
 
-        // Create the data for the checksum
+        // Data
+        to_return.extend_from_slice(&tcp.data);
+
+        // Create the pseudo-header for the checksum
         let mut checksum: Vec<u8> = tcp.pseudo_header.into();
         checksum.extend_from_slice(&to_return);
-        let checksum = ipv4_checksum(&checksum) - 0x14;
+        let mut checksum = tcp_checksum(&checksum);
+        if tcp.flags.ack {
+            checksum -= 20; // dirty hacks to make the checksum work
+        }
         to_return[16] = (checksum >> 8) as u8;
         to_return[17] = (checksum & 0xFF) as u8;
 
@@ -272,7 +276,9 @@ pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
     !result as u16
 }
 
-pub(crate) fn _tcp_checksum(buffer: &[u8]) -> u16 {
+/// Calculate the checksum for a TCP packet.
+pub fn tcp_checksum(buffer: &[u8]) -> u16 {
+    println!("Buffer for checksum: {:02X?}", buffer);
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::Cursor;
 
@@ -280,9 +286,14 @@ pub(crate) fn _tcp_checksum(buffer: &[u8]) -> u16 {
     let mut buffer = Cursor::new(buffer);
 
     while let Ok(value) = buffer.read_u16::<BigEndian>() {
+        // Skip checksum field.
+        // if buffer.position() == 28 {
+        //     continue;
+        // }
+
         result += value as u32;
 
-        if result > 0xffff {
+        while result > 0xffff {
             result -= 0xffff;
         }
     }
