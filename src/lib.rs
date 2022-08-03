@@ -21,6 +21,11 @@ mod tests {
         base_test(100, 1024);
     }
 
+    #[test]
+    fn endurance_test() {
+        base_test(1_000, 256);
+    }
+
     fn base_test(num: usize, size: usize) {
         println!("Starting server");
 
