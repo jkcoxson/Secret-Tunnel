@@ -213,12 +213,12 @@ fn wg_thread(
                                         _ => continue, // wrong protocol
                                     };
 
-                                    // Update the ack and seq numbers
+                                    // Update the ack number
                                     handle.ack = tcp_packet.sequence_number() + 1;
-                                    handle.seq = tcp_packet.acknowledgment_number();
 
                                     // Opening a connection
                                     if tcp_packet.syn() {
+                                        handle.seq += 1;
                                         // Ack it
 
                                         let send_tcp = packets::Tcp {
@@ -375,7 +375,7 @@ fn wg_thread(
                                     }
 
                                     // Receiving data
-                                    if tcp_packet.psh() {
+                                    if tcp_packet.psh() || !ip_packet.payload.is_empty() {
                                         // Send the data to the handle
                                         handle
                                             .outgoing
@@ -539,7 +539,7 @@ fn wg_thread(
                         let handle = handle::TcpInternal {
                             port: external_port,
                             outgoing: sender,
-                            seq: 0,
+                            seq: rand::random::<u32>(),
                             ack: 0,
                         };
 
@@ -547,7 +547,7 @@ fn wg_thread(
                         let tcp_packet = packets::Tcp {
                             source_port: port,
                             destination_port: external_port,
-                            sequence_number: 0,
+                            sequence_number: handle.seq,
                             ack_number: 0,
                             flags: packets::TcpFlags {
                                 fin: false,
