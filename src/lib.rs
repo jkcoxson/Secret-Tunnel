@@ -9,6 +9,8 @@ pub mod wireguard;
 mod tests {
     use std::{io::Write, net::SocketAddrV4};
 
+    use byteorder::ReadBytesExt;
+
     use crate::{event, wireguard};
 
     #[test]
@@ -17,13 +19,47 @@ mod tests {
     }
 
     #[test]
-    fn speed_test_2() {
-        base_test(100, 1024);
+    fn endurance_test() {
+        base_test(1_000, 256);
     }
 
     #[test]
-    fn endurance_test() {
-        base_test(1_000, 256);
+    fn control() {
+        // Create the tests
+        let mut tests = Vec::new();
+        for _ in 0..100 {
+            let mut test = Vec::new();
+            for _ in 0..256 {
+                test.push(rand::random::<u8>());
+            }
+            tests.push(test);
+        }
+        let tests_to_send = tests.clone();
+        let listener = std::net::TcpListener::bind("0.0.0.0:3000").unwrap();
+        let mut socket = std::net::TcpStream::connect("127.0.0.1:3000").unwrap();
+
+        std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+
+            for test in tests_to_send {
+                stream.write_all(&test).unwrap();
+            }
+        });
+
+        let mut collected_tests = Vec::new();
+        while let Ok(u) = socket.read_u8() {
+            collected_tests.push(u);
+        }
+
+        let mut combined_tests = Vec::new();
+        for i in tests {
+            for o in i {
+                combined_tests.push(o);
+            }
+        }
+
+        assert_eq!(combined_tests, collected_tests);
+        println!("All tests passed");
     }
 
     fn base_test(num: usize, size: usize) {
@@ -61,7 +97,6 @@ mod tests {
 
             // Send the test data
             for test in local_tests {
-                println!("Writing test {}", test[test.len() - 1]);
                 stream.write_all(&test).unwrap();
                 std::thread::sleep(std::time::Duration::from_nanos(1));
             }
@@ -85,7 +120,6 @@ mod tests {
         loop {
             match handle.recv().unwrap() {
                 event::Event::Transport(_, data) => {
-                    println!("{:?}", data);
                     collected_tests.push(data);
                     continue;
                 }
@@ -117,6 +151,9 @@ mod tests {
         }
 
         // Compare the two
+        println!("Testing length");
+        assert_eq!(concatenated_sent.len(), concatenated_received.len());
+        println!("Testing contents");
         assert_eq!(concatenated_sent, concatenated_received);
 
         println!("All tests passed");

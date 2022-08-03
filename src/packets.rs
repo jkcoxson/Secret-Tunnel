@@ -196,7 +196,7 @@ impl From<Tcp> for Vec<u8> {
         let mut checksum: Vec<u8> = tcp.pseudo_header.into();
         checksum.extend_from_slice(&to_return);
         let mut checksum = tcp_checksum(&checksum);
-        if tcp.flags.ack {
+        if tcp.flags.ack && checksum > 20 {
             checksum -= 20; // dirty hacks to make the checksum work
         }
         to_return[16] = (checksum >> 8) as u8;
