@@ -449,6 +449,7 @@ fn wg_thread(
             }
             Err(e) => match e.kind() {
                 std::io::ErrorKind::WouldBlock => {}
+                std::io::ErrorKind::TimedOut => {}
                 _ => {
                     println!("Error receiving: {}", e);
                     return;
