@@ -13,6 +13,15 @@ mod tests {
 
     #[test]
     fn speed_test() {
+        base_test(100, 256);
+    }
+
+    #[test]
+    fn speed_test_2() {
+        base_test(100, 1024);
+    }
+
+    fn base_test(num: usize, size: usize) {
         println!("Starting server");
 
         let wg = wireguard::Wireguard::new(SocketAddrV4::new(
@@ -33,9 +42,9 @@ mod tests {
 
             // Create test data
             let mut local_tests = Vec::new();
-            for _ in 0..100 {
+            for _ in 0..num {
                 let mut test = Vec::new();
-                for _ in 0..256 {
+                for _ in 0..size {
                     test.push(rand::random::<u8>());
                 }
                 tests.lock().unwrap().push(test.clone());
