@@ -47,6 +47,7 @@ fn main() {
         for test in local_tests {
             println!("Writing test {}", test[test.len() - 1]);
             stream.write_all(&test).unwrap();
+            std::thread::sleep(std::time::Duration::from_nanos(1));
         }
     });
 
