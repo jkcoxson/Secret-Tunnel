@@ -30,8 +30,6 @@ impl Wireguard {
 
     /// Opens a new TCP connection
     pub fn tcp_connect(&self, port: u16) -> Result<handle::PortHandle, std::io::Error> {
-        println!("Connecting to port {}", port);
-
         // Create a channel to send events to
         let (sender, receiver) = crossbeam_channel::unbounded();
 
@@ -41,14 +39,11 @@ impl Wireguard {
             .unwrap();
 
         // Wait to get the internal port
-        println!("Waiting for handle");
         let internal_port = match receiver.recv().unwrap() {
             event::Event::Port(port) => port,
             event::Event::Error(err) => return Err(err),
             _ => unreachable!(),
         };
-
-        println!("Internal port: {}", internal_port);
 
         // Return the handle
         Ok(handle::PortHandle {
@@ -61,8 +56,6 @@ impl Wireguard {
 }
 
 fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<event::Event>) {
-    println!("Starting Wireguard server...");
-
     // Read in all the keys
     let server_private = include_str!("../wireguard_keys/server_privatekey")[..44].to_string();
     let client_public = include_str!("../wireguard_keys/client_publickey")[..44].to_string();
@@ -98,7 +91,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
             Ok((size, endpoint)) => {
                 // Fill in the peer IP if it's the first packet
                 if peer_ip.is_none() {
-                    println!("Filling in peer IP");
                     peer_ip = Some(match endpoint {
                         SocketAddr::V4(addr) => addr,
                         _ => panic!("Unexpected IP type"),
@@ -136,9 +128,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                     }
                     boringtun::noise::TunnResult::WriteToTunnelV4(b, addr) => {
                         // Parse the bytes as an IP packet
-                        println!("Parsing IP packet");
-                        println!("Bytes: {:02X?}", b);
-                        println!("Address: {:?}", addr);
 
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();
 
@@ -158,7 +147,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         // Handle the packet
                         match ip_packet.transport.unwrap() {
                             etherparse::TransportSlice::Icmpv4(ping_send) => {
-                                println!("Header: {:?}", ping_send.header());
                                 let ping_return_packet: Vec<u8> = packets::Icmp {
                                     type_: 0,
                                     code: 0,
@@ -184,7 +172,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                 }
                                 .into();
 
-                                println!("Returning ping packet: {:02X?}", ip_packet);
                                 let mut buf = [0; 2048];
                                 match tun.encapsulate(&ip_packet, &mut buf) {
                                     boringtun::noise::TunnResult::WriteToNetwork(b) => {
@@ -203,7 +190,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                 // Determine if the destination is a port we're listening on
                                 let destination_port = tcp_packet.destination_port();
                                 if handles.contains_key(&destination_port) {
-                                    println!("Handling TCP packet");
                                     let handle = handles.get_mut(&destination_port).unwrap();
                                     let handle = match handle {
                                         handle::InternalHandle::Tcp(h) => h,
@@ -462,7 +448,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
         // Try to get a message from the channel
         match receiver.try_recv() {
             Ok(event) => {
-                println!("Got event: {:?}", event);
                 match event {
                     event::Event::Transport(internal_port, data) => {
                         // Look up the handle
@@ -525,8 +510,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         }
                     }
                     event::Event::NewTcp(external_port, sender) => {
-                        println!("Establishing new TCP connection");
-
                         // Randomly generate a port not in use
                         let mut port;
                         loop {
@@ -582,7 +565,6 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                         }
                         .into();
 
-                        println!("Sending TCP packet: {:02X?}", ip_packet);
                         let mut buf = [0; 2048];
                         match tun.encapsulate(&ip_packet, &mut buf) {
                             boringtun::noise::TunnResult::WriteToNetwork(b) => {

@@ -278,7 +278,6 @@ fn ipv4_checksum(buffer: &[u8]) -> u16 {
 
 /// Calculate the checksum for a TCP packet.
 fn tcp_checksum(buffer: &[u8]) -> u16 {
-    println!("Buffer for checksum: {:02X?}", buffer);
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::Cursor;
 
