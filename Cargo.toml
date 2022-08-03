@@ -7,9 +7,8 @@ edition = "2021"
 
 [dependencies]
 # Give me a valid reason to not use *
-boringtun = { version = "*" }
+boringtun = { version = "0.4.0" }
 etherparse = { version = "*" }
-smoltcp = { version = "*" }
 rand = { version = "*" }
 byteorder = { version = "*" }
 crossbeam-channel = { version = "*" }
