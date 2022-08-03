@@ -4,6 +4,7 @@ use crossbeam_channel::{RecvError, SendError, TryRecvError};
 
 use crate::event::Event;
 
+#[derive(Clone)]
 pub struct PortHandle {
     pub internal_port: u16,
     pub external_port: u16,
