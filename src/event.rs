@@ -14,6 +14,8 @@ pub enum Event {
     Port(u16),
     /// Connection closed
     Closed,
+    /// Wireguard ready
+    WireguardReady,
     /// Stop all threads
     Stop,
 }

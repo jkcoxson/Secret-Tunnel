@@ -51,10 +51,12 @@ fn main() {
         }
     });
 
-    // Wait until the user presses enter
-    let mut input = String::new();
-    std::io::stdin().read_line(&mut input).unwrap();
-    println!("{}", input);
+    // Ping the server
+    let _ = std::process::Command::new("ping")
+        .arg("-c")
+        .arg("1")
+        .arg("10.7.0.1")
+        .spawn();
 
     let handle = wg.tcp_connect(3000).unwrap();
     send_ready.send(()).unwrap();

@@ -22,8 +22,14 @@ impl Wireguard {
         // Create a channel to send events to
         let (sender, receiver) = crossbeam_channel::unbounded();
 
+        // Ready sender
+        let (ready_sender, ready) = crossbeam_channel::bounded(0);
+
         // Start the new thread
-        std::thread::spawn(move || wg_thread(socket, receiver));
+        std::thread::spawn(move || wg_thread(socket, receiver, ready_sender));
+
+        // Wait until we're ready to return
+        ready.recv().unwrap();
 
         Wireguard { sender }
     }
@@ -55,7 +61,11 @@ impl Wireguard {
     }
 }
 
-fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<event::Event>) {
+fn wg_thread(
+    socket: std::net::UdpSocket,
+    receiver: crossbeam_channel::Receiver<event::Event>,
+    ready_sender: crossbeam_channel::Sender<()>,
+) {
     // Read in all the keys
     let server_private = include_str!("../wireguard_keys/server_privatekey")[..44].to_string();
     let client_public = include_str!("../wireguard_keys/client_publickey")[..44].to_string();
@@ -80,6 +90,8 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
     let mut self_ip = None;
     let mut peer_ip = None;
     let mut peer_vpn_ip = None;
+
+    let mut ready = false;
 
     loop {
         // Try to get a message from Wireguard
@@ -107,6 +119,10 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                     boringtun::noise::TunnResult::Done => {
                         // literally nobody knows what to do with this
                         println!("Done");
+                        if !ready {
+                            ready = true;
+                            ready_sender.send(()).unwrap();
+                        }
                     }
                     boringtun::noise::TunnResult::Err(_) => {
                         println!("Oh no");
