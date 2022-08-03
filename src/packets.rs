@@ -237,7 +237,7 @@ fn sum_be_words(data: &[u8], skipword: usize) -> u32 {
 /// Calculates a checksum. Used by ipv4 and icmp. The two bytes starting at `skipword * 2` will be
 /// ignored. Supposed to be the checksum field, which is regarded as zero during calculation.
 /// Stolen from https://docs.rs/pnet_packet/0.31.0/src/pnet_packet/util.rs.html
-pub fn checksum(data: &[u8], skipword: usize) -> u16 {
+fn checksum(data: &[u8], skipword: usize) -> u16 {
     if data.is_empty() {
         return 0;
     }
@@ -253,7 +253,7 @@ fn finalize_checksum(mut sum: u32) -> u16 {
 }
 
 /// Calculate the checksum for an IPv4 packet.
-pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
+fn ipv4_checksum(buffer: &[u8]) -> u16 {
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::Cursor;
 
@@ -277,7 +277,7 @@ pub fn ipv4_checksum(buffer: &[u8]) -> u16 {
 }
 
 /// Calculate the checksum for a TCP packet.
-pub fn tcp_checksum(buffer: &[u8]) -> u16 {
+fn tcp_checksum(buffer: &[u8]) -> u16 {
     println!("Buffer for checksum: {:02X?}", buffer);
     use byteorder::{BigEndian, ReadBytesExt};
     use std::io::Cursor;

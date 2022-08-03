@@ -9,14 +9,15 @@ const server = net.createServer(socket => {
     });
 });
 
+
 server.listen(port, () => {
     console.log(`Server listening on port ${port}`);
 });
 
 server.on('connection', socket => {
     console.log('That do be a connection!');
-});
-
-server.on('data', data => {
-    console.log(data.toString());
+    socket.on('data', data => {
+        console.log(data.toString());
+        socket.write('Hello World!');
+    })
 });

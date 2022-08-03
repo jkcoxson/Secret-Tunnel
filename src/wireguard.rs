@@ -384,7 +384,7 @@ fn wg_thread(socket: std::net::UdpSocket, receiver: crossbeam_channel::Receiver<
                                             .unwrap();
 
                                         // Add the length of the packet to the ack number
-                                        handle.ack += ip_packet.payload.len() as u32;
+                                        handle.ack += (ip_packet.payload.len() - 1) as u32;
 
                                         // Ack it
                                         let send_tcp = packets::Tcp {
