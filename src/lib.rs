@@ -1,5 +1,6 @@
 // Authored by Jackson Coxson
 
+pub mod bindings;
 pub mod event;
 pub mod handle;
 pub mod packets;

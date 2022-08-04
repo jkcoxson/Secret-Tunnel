@@ -591,6 +591,7 @@ dependencies = [
  "byteorder",
  "crossbeam-channel",
  "etherparse",
+ "lazy_static",
  "packet-builder",
  "pnet",
  "rand",

@@ -14,6 +14,7 @@ use crate::event;
 use crate::handle;
 use crate::packets;
 
+#[derive(Clone)]
 pub struct Wireguard {
     sender: crossbeam_channel::Sender<event::Event>,
 }
