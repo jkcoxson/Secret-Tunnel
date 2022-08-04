@@ -24,6 +24,11 @@ mod tests {
     }
 
     #[test]
+    fn chonk_test() {
+        base_test(100, 2048);
+    }
+
+    #[test]
     fn control() {
         // Create the tests
         let mut tests = Vec::new();
