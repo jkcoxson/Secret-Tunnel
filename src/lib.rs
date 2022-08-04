@@ -20,7 +20,7 @@ mod tests {
 
     #[test]
     fn endurance_test() {
-        base_test(1_000, 256);
+        base_test(1_000_000, 256);
     }
 
     #[test]
