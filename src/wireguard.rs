@@ -274,6 +274,68 @@ fn wg_thread(
                                             .unwrap();
                                     }
 
+                                    // Receiving data
+                                    if tcp_packet.psh() || !ip_packet.payload.is_empty() {
+                                        // Send the data to the handle
+                                        handle
+                                            .outgoing
+                                            .send(event::Event::Transport(
+                                                0,
+                                                ip_packet.payload.to_vec(),
+                                            ))
+                                            .unwrap();
+
+                                        // Add the length of the packet to the ack number
+                                        handle.ack += (ip_packet.payload.len() - 1) as u32;
+
+                                        // Ack it
+                                        let send_tcp = packets::Tcp {
+                                            source_port: tcp_packet.destination_port(),
+                                            destination_port: handle.port,
+                                            sequence_number: handle.seq,
+                                            window_size: tcp_packet.window_size(),
+                                            urgent_pointer: tcp_packet.urgent_pointer(),
+                                            ack_number: handle.ack,
+                                            flags: packets::TcpFlags {
+                                                fin: false,
+                                                syn: false,
+                                                rst: false,
+                                                psh: false,
+                                                ack: true,
+                                                urg: false,
+                                                ece: false,
+                                                cwr: false,
+                                            },
+                                            pseudo_header: packets::PseudoHeader {
+                                                source: self_ip.unwrap(),
+                                                destination: peer_vpn_ip.unwrap(),
+                                                protocol: 6,
+                                                length: 0,
+                                            },
+                                            data: vec![],
+                                        };
+
+                                        let ip_packet: Vec<u8> = packets::Ipv4 {
+                                            id: std::process::id() as u16,
+                                            ttl: 64,
+                                            protocol: 6,
+                                            source: self_ip.unwrap(),
+                                            destination: peer_vpn_ip.unwrap(),
+                                            payload: send_tcp.into(),
+                                        }
+                                        .into();
+
+                                        let mut buf = [0; 2048];
+                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, endpoint).unwrap();
+                                            }
+                                            _ => {
+                                                println!("Unexpected result");
+                                            }
+                                        }
+                                    }
+
                                     // Closing a connection
                                     if tcp_packet.fin() {
                                         // Ack it
@@ -372,68 +434,6 @@ fn wg_thread(
 
                                         // Send the close event to the handle
                                         let _ = handle.outgoing.send(event::Event::Closed);
-                                    }
-
-                                    // Receiving data
-                                    if tcp_packet.psh() || !ip_packet.payload.is_empty() {
-                                        // Send the data to the handle
-                                        handle
-                                            .outgoing
-                                            .send(event::Event::Transport(
-                                                0,
-                                                ip_packet.payload.to_vec(),
-                                            ))
-                                            .unwrap();
-
-                                        // Add the length of the packet to the ack number
-                                        handle.ack += (ip_packet.payload.len() - 1) as u32;
-
-                                        // Ack it
-                                        let send_tcp = packets::Tcp {
-                                            source_port: tcp_packet.destination_port(),
-                                            destination_port: handle.port,
-                                            sequence_number: handle.seq,
-                                            window_size: tcp_packet.window_size(),
-                                            urgent_pointer: tcp_packet.urgent_pointer(),
-                                            ack_number: handle.ack,
-                                            flags: packets::TcpFlags {
-                                                fin: false,
-                                                syn: false,
-                                                rst: false,
-                                                psh: false,
-                                                ack: true,
-                                                urg: false,
-                                                ece: false,
-                                                cwr: false,
-                                            },
-                                            pseudo_header: packets::PseudoHeader {
-                                                source: self_ip.unwrap(),
-                                                destination: peer_vpn_ip.unwrap(),
-                                                protocol: 6,
-                                                length: 0,
-                                            },
-                                            data: vec![],
-                                        };
-
-                                        let ip_packet: Vec<u8> = packets::Ipv4 {
-                                            id: std::process::id() as u16,
-                                            ttl: 64,
-                                            protocol: 6,
-                                            source: self_ip.unwrap(),
-                                            destination: peer_vpn_ip.unwrap(),
-                                            payload: send_tcp.into(),
-                                        }
-                                        .into();
-
-                                        let mut buf = [0; 2048];
-                                        match tun.encapsulate(&ip_packet, &mut buf) {
-                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                                                socket.send_to(b, endpoint).unwrap();
-                                            }
-                                            _ => {
-                                                println!("Unexpected result");
-                                            }
-                                        }
                                     }
                                 } else {
                                     println!("Unknown port: {}", destination_port);
