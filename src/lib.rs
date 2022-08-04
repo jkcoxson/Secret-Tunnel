@@ -24,7 +24,7 @@ mod tests {
 
     #[test]
     fn chonk_test() {
-        base_test(100, 2048);
+        base_test(100, 100_000);
     }
 
     #[test]
@@ -44,7 +44,7 @@ mod tests {
 
             let (mut socket, _) = listener.accept().unwrap();
 
-            while position < 10 {
+            while position < 255 {
                 let time = std::time::Instant::now();
                 // Send the current position
                 socket.write_u8(position).unwrap();
