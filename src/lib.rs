@@ -40,20 +40,27 @@ mod tests {
 
         std::thread::spawn(move || {
             let mut position = 0;
+            let mut response_times = vec![];
 
             let (mut socket, _) = listener.accept().unwrap();
 
             while position < 10 {
+                let time = std::time::Instant::now();
                 // Send the current position
-                println!("Sending {}", position);
                 socket.write_u8(position).unwrap();
 
                 // Read the next position
                 let next = socket.read_u8().unwrap();
-                println!("Checking {}", next);
                 assert!(next == position + 1);
                 position = next;
+                response_times.push(time.elapsed());
             }
+            let total_time: u128 = response_times.iter().map(|t| t.as_millis()).sum();
+
+            println!(
+                "Average response time: {:?}ms",
+                total_time as u32 / response_times.len() as u32
+            );
         });
 
         // Ping the server
@@ -68,7 +75,6 @@ mod tests {
         loop {
             match handle.recv().unwrap() {
                 event::Event::Transport(_, data) => {
-                    println!("Received {}", data[0]);
                     let position = data[0];
                     handle.send(vec![position + 1]).unwrap();
                 }
