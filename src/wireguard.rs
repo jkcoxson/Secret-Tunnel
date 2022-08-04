@@ -606,7 +606,7 @@ fn wg_thread(
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {}
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                panic!("Channel disconnected");
+                println!("Channel disconnected");
             }
         }
     }
