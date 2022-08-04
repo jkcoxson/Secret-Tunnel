@@ -55,10 +55,10 @@ mod tests {
                 position = next;
                 response_times.push(time.elapsed());
             }
-            let total_time: u128 = response_times.iter().map(|t| t.as_millis()).sum();
+            let total_time: u128 = response_times.iter().map(|t| t.as_micros()).sum();
 
             println!(
-                "Average response time: {:?}ms",
+                "Average response time: {:?} microseconds",
                 total_time as u32 / response_times.len() as u32
             );
         });
