@@ -16,5 +16,8 @@ packet-builder = { version = "*" }
 pnet = { version = "*" }
 lazy_static = { version = "*" }
 
+[build-dependencies]
+cbindgen = { version = "*" }
+
 [lib]
 crate-type = ["staticlib"]
