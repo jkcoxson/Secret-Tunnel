@@ -16,6 +16,7 @@ lazy_static! {
     static ref WG: Arc<Mutex<Option<crate::wireguard::Wireguard>>> = Arc::new(Mutex::new(None));
 }
 
+#[no_mangle]
 /// Creates a new Wireguard instance. This is blocking until a successful handshake!!
 /// # Arguments
 /// * `address` - The address to listen on. Usually `127.0.0.1:51820`.
@@ -39,6 +40,7 @@ pub extern "C" fn new_wireguard(address: *const c_char) -> *mut c_void {
     Box::into_raw(Box::new(Wireguard::new(address))) as *mut c_void
 }
 
+#[no_mangle]
 /// Connect to a TCP server running on the client. Blocks until successful handshake.
 /// # Arguments
 /// * 'wireguard' - The pointer to the Wireguard struct. Pass `NULL` to lookup or create a static instance.
@@ -81,6 +83,7 @@ pub unsafe extern "C" fn connect_tcp(wireguard: *mut Wireguard, port: u16) -> *m
     Box::into_raw(Box::new(handle)) as *mut c_void
 }
 
+#[no_mangle]
 /// Sends data to the client through the handle.
 /// # Arguments
 /// * 'handle' - The pointer to the handle.
@@ -114,6 +117,7 @@ pub unsafe extern "C" fn tcp_handle_send(
     }
 }
 
+#[no_mangle]
 /// Receives data from the client through the handle.
 /// # Arguments
 /// * 'handle' - The pointer to the handle.
