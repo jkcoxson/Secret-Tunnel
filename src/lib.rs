@@ -7,9 +7,13 @@ pub mod wireguard;
 
 #[cfg(test)]
 mod tests {
+    use byteorder::{ReadBytesExt, WriteBytesExt};
     use std::{io::Write, net::SocketAddrV4};
 
-    use byteorder::{ReadBytesExt, WriteBytesExt};
+    use packet_builder::payload::PayloadData;
+    use packet_builder::*;
+    use pnet::packet::tcp::TcpFlags;
+    use pnet::packet::Packet;
 
     use crate::{event, wireguard};
 
@@ -74,6 +78,20 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn packet() {
+        // Generate a TCP PSH|ACK packet with data
+        let mut pkt_buf = [0u8; 1500];
+        let pkt = packet_builder!(
+            pkt_buf,
+            ipv4({set_source => ipv4addr!("192.168.1.1"), set_destination => ipv4addr!("127.0.0.1") }) /
+            tcp({set_source => 43455, set_destination => 80, set_flags => (TcpFlags::PSH | TcpFlags::ACK)}) /
+            payload({"hello".to_string().into_bytes()})
+        );
+
+        println!("{:02X?}", pkt.packet());
     }
 
     #[test]

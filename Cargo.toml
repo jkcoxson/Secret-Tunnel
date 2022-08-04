@@ -12,6 +12,8 @@ etherparse = { version = "*" }
 rand = { version = "*" }
 byteorder = { version = "*" }
 crossbeam-channel = { version = "*" }
+packet-builder = { version = "*" }
+pnet = { version = "*" }
 
 [lib]
 crate-type = ["staticlib"]

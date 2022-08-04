@@ -5,6 +5,11 @@ use boringtun::crypto::{X25519PublicKey, X25519SecretKey};
 use std::collections::HashMap;
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
+use packet_builder::payload::PayloadData;
+use packet_builder::*;
+use pnet::packet::tcp::TcpFlags;
+use pnet::packet::Packet;
+
 use crate::event;
 use crate::handle;
 use crate::packets;
@@ -221,44 +226,16 @@ fn wg_thread(
                                         handle.seq += 1;
                                         // Ack it
 
-                                        let send_tcp = packets::Tcp {
-                                            source_port: tcp_packet.destination_port(),
-                                            destination_port: handle.port,
-                                            sequence_number: handle.seq,
-                                            window_size: tcp_packet.window_size(),
-                                            urgent_pointer: tcp_packet.urgent_pointer(),
-                                            ack_number: handle.ack,
-                                            flags: packets::TcpFlags {
-                                                fin: false,
-                                                syn: false,
-                                                rst: false,
-                                                psh: false,
-                                                ack: true,
-                                                urg: false,
-                                                ece: false,
-                                                cwr: false,
-                                            },
-                                            pseudo_header: packets::PseudoHeader {
-                                                source: self_ip.unwrap(),
-                                                destination: peer_vpn_ip.unwrap(),
-                                                protocol: 6,
-                                                length: 0,
-                                            },
-                                            data: vec![],
-                                        };
-
-                                        let ip_packet: Vec<u8> = packets::Ipv4 {
-                                            id: std::process::id() as u16,
-                                            ttl: 64,
-                                            protocol: 6,
-                                            source: self_ip.unwrap(),
-                                            destination: peer_vpn_ip.unwrap(),
-                                            payload: send_tcp.into(),
-                                        }
-                                        .into();
+                                        let mut pkt_buf = [0u8; 1500];
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({"".to_string().into_bytes()})
+                                        );
 
                                         let mut buf = [0; 2048];
-                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
                                             boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
@@ -289,44 +266,17 @@ fn wg_thread(
                                         handle.ack += (ip_packet.payload.len() - 1) as u32;
 
                                         // Ack it
-                                        let send_tcp = packets::Tcp {
-                                            source_port: tcp_packet.destination_port(),
-                                            destination_port: handle.port,
-                                            sequence_number: handle.seq,
-                                            window_size: tcp_packet.window_size(),
-                                            urgent_pointer: tcp_packet.urgent_pointer(),
-                                            ack_number: handle.ack,
-                                            flags: packets::TcpFlags {
-                                                fin: false,
-                                                syn: false,
-                                                rst: false,
-                                                psh: false,
-                                                ack: true,
-                                                urg: false,
-                                                ece: false,
-                                                cwr: false,
-                                            },
-                                            pseudo_header: packets::PseudoHeader {
-                                                source: self_ip.unwrap(),
-                                                destination: peer_vpn_ip.unwrap(),
-                                                protocol: 6,
-                                                length: 0,
-                                            },
-                                            data: vec![],
-                                        };
 
-                                        let ip_packet: Vec<u8> = packets::Ipv4 {
-                                            id: std::process::id() as u16,
-                                            ttl: 64,
-                                            protocol: 6,
-                                            source: self_ip.unwrap(),
-                                            destination: peer_vpn_ip.unwrap(),
-                                            payload: send_tcp.into(),
-                                        }
-                                        .into();
+                                        let mut pkt_buf = [0u8; 1500];
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({"".to_string().into_bytes()})
+                                        );
 
                                         let mut buf = [0; 2048];
-                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
                                             boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
@@ -339,44 +289,16 @@ fn wg_thread(
                                     // Closing a connection
                                     if tcp_packet.fin() {
                                         // Ack it
-                                        let send_tcp = packets::Tcp {
-                                            source_port: tcp_packet.destination_port(),
-                                            destination_port: handle.port,
-                                            sequence_number: handle.seq,
-                                            window_size: tcp_packet.window_size(),
-                                            urgent_pointer: tcp_packet.urgent_pointer(),
-                                            ack_number: handle.ack,
-                                            flags: packets::TcpFlags {
-                                                fin: false,
-                                                syn: false,
-                                                rst: false,
-                                                psh: false,
-                                                ack: true,
-                                                urg: false,
-                                                ece: false,
-                                                cwr: false,
-                                            },
-                                            pseudo_header: packets::PseudoHeader {
-                                                source: self_ip.unwrap(),
-                                                destination: peer_vpn_ip.unwrap(),
-                                                protocol: 6,
-                                                length: 0,
-                                            },
-                                            data: vec![],
-                                        };
-
-                                        let ip_packet: Vec<u8> = packets::Ipv4 {
-                                            id: std::process::id() as u16,
-                                            ttl: 64,
-                                            protocol: 6,
-                                            source: self_ip.unwrap(),
-                                            destination: peer_vpn_ip.unwrap(),
-                                            payload: send_tcp.into(),
-                                        }
-                                        .into();
+                                        let mut pkt_buf = [0u8; 1500];
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({"".to_string().into_bytes()})
+                                        );
 
                                         let mut buf = [0; 2048];
-                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
                                             boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
@@ -386,44 +308,16 @@ fn wg_thread(
                                         }
 
                                         // Send a fin back to the server
-                                        let send_tcp = packets::Tcp {
-                                            source_port: tcp_packet.destination_port(),
-                                            destination_port: handle.port,
-                                            sequence_number: handle.seq,
-                                            window_size: tcp_packet.window_size(),
-                                            urgent_pointer: tcp_packet.urgent_pointer(),
-                                            ack_number: handle.ack,
-                                            flags: packets::TcpFlags {
-                                                fin: true,
-                                                syn: false,
-                                                rst: false,
-                                                psh: false,
-                                                ack: true,
-                                                urg: false,
-                                                ece: false,
-                                                cwr: false,
-                                            },
-                                            pseudo_header: packets::PseudoHeader {
-                                                source: self_ip.unwrap(),
-                                                destination: peer_vpn_ip.unwrap(),
-                                                protocol: 6,
-                                                length: 0,
-                                            },
-                                            data: vec![],
-                                        };
-
-                                        let ip_packet: Vec<u8> = packets::Ipv4 {
-                                            id: std::process::id() as u16,
-                                            ttl: 64,
-                                            protocol: 6,
-                                            source: self_ip.unwrap(),
-                                            destination: peer_vpn_ip.unwrap(),
-                                            payload: send_tcp.into(),
-                                        }
-                                        .into();
+                                        let mut pkt_buf = [0u8; 1500];
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::FIN), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({"".to_string().into_bytes()})
+                                        );
 
                                         let mut buf = [0; 2048];
-                                        match tun.encapsulate(&ip_packet, &mut buf) {
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
                                             boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
@@ -478,44 +372,16 @@ fn wg_thread(
 
                         match handle {
                             handle::InternalHandle::Tcp(handle) => {
-                                let tcp_packet = packets::Tcp {
-                                    source_port: internal_port,
-                                    destination_port: handle.port,
-                                    sequence_number: handle.seq,
-                                    window_size: 65535,
-                                    urgent_pointer: 0,
-                                    ack_number: handle.ack,
-                                    flags: packets::TcpFlags {
-                                        fin: false,
-                                        syn: false,
-                                        rst: false,
-                                        psh: true,
-                                        ack: true,
-                                        urg: false,
-                                        ece: false,
-                                        cwr: false,
-                                    },
-                                    pseudo_header: packets::PseudoHeader {
-                                        source: self_ip.unwrap(),
-                                        destination: peer_vpn_ip.unwrap(),
-                                        protocol: 6,
-                                        length: data.len() as u16,
-                                    },
-                                    data,
-                                };
-
-                                let ip_packet: Vec<u8> = packets::Ipv4 {
-                                    id: std::process::id() as u16,
-                                    ttl: 64,
-                                    protocol: 6,
-                                    source: self_ip.unwrap(),
-                                    destination: peer_vpn_ip.unwrap(),
-                                    payload: tcp_packet.into(),
-                                }
-                                .into();
+                                let mut pkt_buf = [0u8; 1500];
+                                let pkt = packet_builder!(
+                                    pkt_buf,
+                                    ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                    tcp({set_source => internal_port, set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::PSH), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                    payload({data.clone()})
+                                );
 
                                 let mut buf = [0; 2048];
-                                match tun.encapsulate(&ip_packet, &mut buf) {
+                                match tun.encapsulate(pkt.packet(), &mut buf) {
                                     boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                         socket.send_to(b, peer_ip.unwrap()).unwrap();
                                     }
@@ -545,45 +411,16 @@ fn wg_thread(
                         };
 
                         // Create TCP syn packet
-                        let tcp_packet = packets::Tcp {
-                            source_port: port,
-                            destination_port: external_port,
-                            sequence_number: handle.seq,
-                            ack_number: 0,
-                            flags: packets::TcpFlags {
-                                fin: false,
-                                syn: true,
-                                rst: false,
-                                psh: false,
-                                ack: false,
-                                urg: false,
-                                ece: false,
-                                cwr: false,
-                            },
-                            window_size: 0xFFFF,
-                            urgent_pointer: 0,
-                            pseudo_header: packets::PseudoHeader {
-                                source: self_ip.unwrap(),
-                                destination: peer_vpn_ip.unwrap(),
-                                protocol: 6,
-                                length: 20,
-                            },
-                            data: vec![],
-                        };
-
-                        // Create IP packet
-                        let ip_packet: Vec<u8> = packets::Ipv4 {
-                            id: std::process::id() as u16,
-                            ttl: 64,
-                            protocol: 6,
-                            source: self_ip.unwrap(),
-                            destination: peer_vpn_ip.unwrap(),
-                            payload: tcp_packet.into(),
-                        }
-                        .into();
+                        let mut pkt_buf = [0u8; 1500];
+                        let pkt = packet_builder!(
+                            pkt_buf,
+                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                            tcp({set_source => port, set_destination => external_port, set_flags => (TcpFlags::SYN), set_sequence => handle.seq, set_acknowledgement => 0}) /
+                            payload({"".to_string().into_bytes()})
+                        );
 
                         let mut buf = [0; 2048];
-                        match tun.encapsulate(&ip_packet, &mut buf) {
+                        match tun.encapsulate(pkt.packet(), &mut buf) {
                             boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                 socket.send_to(b, peer_ip.unwrap()).unwrap();
                             }
