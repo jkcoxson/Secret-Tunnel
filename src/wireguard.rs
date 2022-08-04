@@ -218,14 +218,13 @@ fn wg_thread(
                                         _ => continue, // wrong protocol
                                     };
 
-                                    // Update the ack number
-                                    handle.ack = tcp_packet.sequence_number() + 1;
-
                                     // Opening a connection
                                     if tcp_packet.syn() {
-                                        handle.seq += 1;
-                                        // Ack it
+                                        // Syn is special: it has a phantom data byte so we increase ack by 1
+                                        handle.ack = tcp_packet.sequence_number() + 1;
+                                        println!("Setting ack to {}", handle.ack);
 
+                                        // Ack it
                                         let mut pkt_buf = [0u8; 1500];
                                         let pkt = packet_builder!(
                                             pkt_buf,
@@ -249,10 +248,40 @@ fn wg_thread(
                                             .outgoing
                                             .send(event::Event::Port(destination_port))
                                             .unwrap();
+
+                                        continue;
+                                    }
+
+                                    // Check the sequence number
+                                    if tcp_packet.sequence_number() != handle.ack {
+                                        println!("Unexpected sequence number");
+                                        // Ack the old packet to request a retransmission
+                                        let mut pkt_buf = [0u8; 1500];
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({Vec::<u8>::new()})
+                                        );
+
+                                        let mut buf = [0; 2048];
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, endpoint).unwrap();
+                                            }
+                                            _ => {
+                                                println!("Unexpected result");
+                                            }
+                                        }
+                                        continue;
                                     }
 
                                     // Receiving data
                                     if tcp_packet.psh() || !ip_packet.payload.is_empty() {
+                                        // The next sequence number we expect is the one we just received
+                                        // plus the length of the data we received plus one
+                                        handle.ack += ip_packet.payload.len() as u32;
+
                                         // Send the data to the handle
                                         handle
                                             .outgoing
@@ -262,11 +291,7 @@ fn wg_thread(
                                             ))
                                             .unwrap();
 
-                                        // Add the length of the packet to the ack number
-                                        handle.ack += (ip_packet.payload.len() - 1) as u32;
-
                                         // Ack it
-
                                         let mut pkt_buf = [0u8; 1500];
                                         let pkt = packet_builder!(
                                             pkt_buf,
@@ -380,6 +405,8 @@ fn wg_thread(
                                     payload({data.clone()})
                                 );
 
+                                handle.seq += data.len() as u32;
+
                                 let mut buf = [0; 2048];
                                 match tun.encapsulate(pkt.packet(), &mut buf) {
                                     boringtun::noise::TunnResult::WriteToNetwork(b) => {
@@ -403,7 +430,7 @@ fn wg_thread(
                         }
 
                         // Create a new handle
-                        let handle = handle::TcpInternal {
+                        let mut handle = handle::TcpInternal {
                             port: external_port,
                             outgoing: sender,
                             seq: rand::random::<u32>(),
@@ -428,6 +455,9 @@ fn wg_thread(
                                 println!("Unexpected result");
                             }
                         }
+
+                        handle.seq += 1;
+                        handle.ack += 1;
 
                         // Add it to the hashmap
                         handles.insert(port, handle::InternalHandle::Tcp(handle));
