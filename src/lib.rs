@@ -9,7 +9,7 @@ pub mod wireguard;
 mod tests {
     use std::{io::Write, net::SocketAddrV4};
 
-    use byteorder::ReadBytesExt;
+    use byteorder::{ReadBytesExt, WriteBytesExt};
 
     use crate::{event, wireguard};
 
@@ -26,6 +26,54 @@ mod tests {
     #[test]
     fn chonk_test() {
         base_test(100, 2048);
+    }
+
+    #[test]
+    fn ping_test() {
+        let wg = wireguard::Wireguard::new(SocketAddrV4::new(
+            std::net::Ipv4Addr::new(0, 0, 0, 0),
+            51820,
+        ));
+        println!("Wireguard ready");
+
+        // Create a TCP listener
+        let listener = std::net::TcpListener::bind("0.0.0.0:3000").unwrap();
+
+        std::thread::spawn(move || {
+            let mut position = 0;
+
+            let (mut socket, _) = listener.accept().unwrap();
+
+            while position < 10 {
+                // Send the current position
+                println!("Sending {}", position);
+                socket.write_u8(position).unwrap();
+
+                // Read the next position
+                let next = socket.read_u8().unwrap();
+                println!("Checking {}", next);
+                assert!(next == position + 1);
+                position = next;
+            }
+        });
+
+        let handle = wg.tcp_connect(3000).unwrap();
+
+        loop {
+            match handle.recv().unwrap() {
+                event::Event::Transport(_, data) => {
+                    println!("Received {}", data[0]);
+                    let position = data[0];
+                    handle.send(vec![position + 1]).unwrap();
+                }
+                event::Event::Closed => {
+                    break;
+                }
+                _ => {
+                    continue;
+                }
+            }
+        }
     }
 
     #[test]
