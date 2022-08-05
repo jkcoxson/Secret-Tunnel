@@ -20,4 +20,4 @@ lazy_static = { version = "*" }
 cbindgen = { version = "*" }
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "cdylib"]
