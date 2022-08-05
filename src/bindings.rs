@@ -150,3 +150,9 @@ pub unsafe extern "C" fn tcp_handle_recv(handle: *mut PortHandle, mut to_fill: *
         Err(_) => 0,
     }
 }
+
+#[no_mangle]
+/// Test function for bindings.
+pub extern "C" fn test() {
+    println!("Hello from Rust!");
+}
