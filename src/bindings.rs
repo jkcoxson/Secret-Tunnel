@@ -54,19 +54,19 @@ pub unsafe extern "C" fn connect_tcp(wireguard: *mut Wireguard, port: u16) -> *m
     let wireguard = if wireguard.is_null() {
         // See if we have a static pointer
         match WG.lock() {
-            Ok(wg) => match wg.clone().as_mut() {
+            Ok(mut wg) => match wg.clone().as_mut() {
                 Some(wg) => Box::new(wg.clone()),
                 None => {
                     // Create a new one
-                    let wg = Wireguard::new(SocketAddrV4::new(
+                    let created_wg = Wireguard::new(SocketAddrV4::new(
                         std::net::Ipv4Addr::new(0, 0, 0, 0),
                         51820,
                     ));
 
-                    // Save it for later
-                    *WG.lock().unwrap() = Some(wg.clone());
+                    // Store it
+                    *wg = Some(created_wg.clone());
 
-                    Box::new(wg)
+                    Box::new(created_wg)
                 }
             },
             Err(_) => return std::ptr::null_mut(),

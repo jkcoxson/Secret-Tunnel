@@ -36,6 +36,7 @@ impl Wireguard {
 
         // Wait until we're ready to return
         ready.recv().unwrap();
+        println!("WireGuard is ready");
 
         Wireguard { sender }
     }
@@ -124,21 +125,17 @@ fn wg_thread(
                 match p {
                     boringtun::noise::TunnResult::Done => {
                         // literally nobody knows what to do with this
-                        println!("Done");
                         if !ready {
                             ready = true;
                             ready_sender.send(()).unwrap();
                         }
                     }
                     boringtun::noise::TunnResult::Err(_) => {
-                        println!("Oh no");
-                        println!("Anyways...");
+                        // don't care
                     }
                     boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                        println!("Yeeting back to endpoint");
                         socket.send_to(b, endpoint).unwrap();
                         loop {
-                            println!("Continuing endpoint yeet");
                             let p = tun.decapsulate(Some(endpoint.ip()), &[], &mut unencrypted_buf);
                             match p {
                                 boringtun::noise::TunnResult::WriteToNetwork(b) => {
@@ -421,6 +418,7 @@ fn wg_thread(
                         }
                     }
                     event::Event::NewTcp(external_port, sender) => {
+                        println!("Creating TCP connection: {}", external_port);
                         // Randomly generate a port not in use
                         let mut port;
                         loop {
