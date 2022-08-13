@@ -14,11 +14,6 @@ mod tests {
     use crate::{event, wireguard};
 
     #[test]
-    fn speed_test() {
-        base_test(100, 256);
-    }
-
-    #[test]
     fn endurance_test() {
         base_test(100_000, 256);
     }
@@ -223,5 +218,8 @@ mod tests {
         assert_eq!(concatenated_sent, concatenated_received);
 
         println!("All tests passed");
+
+        drop(wg);
+        std::thread::sleep(std::time::Duration::from_millis(500))
     }
 }

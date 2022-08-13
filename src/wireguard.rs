@@ -41,6 +41,10 @@ impl Wireguard {
         Wireguard { sender }
     }
 
+    pub fn stop(&self) {
+        self.sender.send(event::Event::Stop).unwrap();
+    }
+
     /// Opens a new TCP connection
     pub fn tcp_connect(&self, port: u16) -> Result<handle::PortHandle, std::io::Error> {
         // Create a channel to send events to
@@ -65,6 +69,12 @@ impl Wireguard {
             outgoing: self.sender.clone(),
             incoming: receiver,
         })
+    }
+}
+
+impl Drop for Wireguard {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
