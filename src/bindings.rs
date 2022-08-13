@@ -41,6 +41,22 @@ pub extern "C" fn new_wireguard(address: *const c_char) -> *mut c_void {
 }
 
 #[no_mangle]
+/// Destroys a Wireguard instance, freeing the memory on the stack
+/// # Arguments
+/// * `handle` - The handle to the Wireguard instance.
+/// # Safety
+/// Don't be stupid
+pub unsafe extern "C" fn free_wireguard(handle: *mut Wireguard) {
+    if handle.is_null() {
+        if let Ok(mut wg) = WG.lock() {
+            *wg = None;
+        }
+    } else {
+        Box::from_raw(handle);
+    }
+}
+
+#[no_mangle]
 /// Connect to a TCP server running on the client. Blocks until successful handshake.
 /// # Arguments
 /// * 'wireguard' - The pointer to the Wireguard struct. Pass `NULL` to lookup or create a static instance.
@@ -102,19 +118,32 @@ pub unsafe extern "C" fn tcp_handle_send(
     if handle.is_null() {
         return 0;
     }
+
+    println!("Unpacking handle");
     let handle = Box::from_raw(handle as *mut PortHandle);
 
     // Check the data
     if data.is_null() {
         return 0;
     }
+
+    println!("Unpacking data");
     let data = std::slice::from_raw_parts(data, size);
 
+    println!("Converting to vec");
+    let data = data.to_vec();
+    println!("{:?}", data);
+
     // Send the data
-    match handle.send(data.to_vec()) {
+    println!("Sending data");
+    let res = match handle.send(data) {
         Ok(_) => 0,
         Err(_) => 1,
-    }
+    };
+
+    println!("Dropping");
+
+    res
 }
 
 #[no_mangle]
@@ -126,7 +155,7 @@ pub unsafe extern "C" fn tcp_handle_send(
 /// The number of bytes received on success, or 0 on failure.
 /// # Safety
 /// Don't be stupid
-pub unsafe extern "C" fn tcp_handle_recv(handle: *mut PortHandle, mut to_fill: *mut u8) -> c_uint {
+pub unsafe extern "C" fn tcp_handle_recv(handle: *mut PortHandle, to_fill: *mut u8) -> c_uint {
     // Check the handle
     if handle.is_null() {
         return 0;
@@ -137,12 +166,9 @@ pub unsafe extern "C" fn tcp_handle_recv(handle: *mut PortHandle, mut to_fill: *
         Ok(event) => {
             match event {
                 crate::event::Event::Transport(_, data) => {
-                    // Copy the data into the buffer
-                    let size = data.len();
-                    let mut b = Box::new(data);
-                    to_fill = b.as_mut_ptr();
-                    Box::into_raw(b);
-                    size as c_uint
+                    let mut fill_pls = Vec::from_raw_parts(to_fill, data.len(), data.len());
+                    fill_pls.extend_from_slice(&data);
+                    data.len() as c_uint
                 }
                 _ => 0,
             }

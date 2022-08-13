@@ -4,7 +4,7 @@ language = "C"
 
 ############## Options for Wrapping the Contents of the Header #################
 
-# header = "/* Text to put at the beginning of the generated file. Probably a license. */"
+header = "// Jackson Coxson"
 # trailer = "/* Text to put at the end of the generated file */"
 # include_guard = "my_bindings_h"
 # pragma_once = true
@@ -24,7 +24,7 @@ after_includes = ""
 ############################ Code Style Options ################################
 
 braces = "SameLine"
-line_length = 100
+line_length = 500
 tab_width = 2
 documentation = true
 documentation_style = "auto"
