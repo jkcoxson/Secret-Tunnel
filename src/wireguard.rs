@@ -47,6 +47,8 @@ impl Wireguard {
 
     /// Opens a new TCP connection
     pub fn tcp_connect(&self, port: u16) -> Result<handle::PortHandle, std::io::Error> {
+        println!("Connecting to port {}", port);
+
         // Create a channel to send events to
         let (sender, receiver) = crossbeam_channel::unbounded();
 
@@ -56,11 +58,13 @@ impl Wireguard {
             .unwrap();
 
         // Wait to get the internal port
+        println!("Waiting to receive internal port");
         let internal_port = match receiver.recv().unwrap() {
             event::Event::Port(port) => port,
             event::Event::Error(err) => return Err(err),
             _ => unreachable!(),
         };
+        println!("Got internal port");
 
         // Return the handle
         Ok(handle::PortHandle {
@@ -156,8 +160,9 @@ fn wg_thread(
                         }
                     }
                     boringtun::noise::TunnResult::WriteToTunnelV4(b, addr) => {
-                        // Parse the bytes as an IP packet
+                        println!("\n{:02X?}\n", b);
 
+                        // Parse the bytes as an IP packet
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();
 
                         let incoming_ip = match ip_packet.ip.unwrap() {

@@ -15,6 +15,7 @@ crossbeam-channel = { version = "*" }
 packet-builder = { version = "*" }
 pnet = { version = "*" }
 lazy_static = { version = "*" }
+libc = { version = "*" }
 
 [build-dependencies]
 cbindgen = { version = "*" }

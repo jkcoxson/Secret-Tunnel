@@ -1,5 +1,7 @@
 // Jackson Coxson
 
+use std::fmt::Debug;
+
 use crossbeam_channel::{RecvError, SendError, TryRecvError};
 
 use crate::event::Event;
@@ -20,11 +22,27 @@ impl PortHandle {
         self.incoming.try_recv()
     }
     pub fn send(&self, payload: Vec<u8>) -> Result<(), SendError<Event>> {
-        self.outgoing
-            .send(Event::Transport(self.internal_port, payload))
+        println!("Sending: {:?}", payload);
+        let res = self
+            .outgoing
+            .send(Event::Transport(self.internal_port, payload));
+
+        println!("Returning from handle send");
+        res
     }
     pub fn close(&self) {
         self.outgoing.send(Event::Closed).unwrap();
+    }
+}
+
+impl Debug for PortHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PortHandle")
+            .field("internal_port", &self.internal_port)
+            .field("external_port", &self.external_port)
+            .field("outgoing", &self.outgoing)
+            .field("incoming", &self.incoming)
+            .finish()
     }
 }
 

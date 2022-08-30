@@ -111,7 +111,7 @@ pub unsafe extern "C" fn connect_tcp(wireguard: *mut Wireguard, port: u16) -> *m
 /// Don't be stupid
 pub unsafe extern "C" fn tcp_handle_send(
     handle: *mut PortHandle,
-    data: *const u8,
+    pointer: *const u8,
     size: usize,
 ) -> c_uint {
     // Check the handle
@@ -122,17 +122,18 @@ pub unsafe extern "C" fn tcp_handle_send(
     println!("Unpacking handle");
     let handle = Box::from_raw(handle as *mut PortHandle);
 
+    println!("{:?}", handle);
+
     // Check the data
-    if data.is_null() {
+    if pointer.is_null() {
         return 0;
     }
 
     println!("Unpacking data");
-    let data = std::slice::from_raw_parts(data, size);
+    let slice_data = std::slice::from_raw_parts(pointer, size);
 
     println!("Converting to vec");
-    let data = data.to_vec();
-    println!("{:?}", data);
+    let data = slice_data.to_vec();
 
     // Send the data
     println!("Sending data");
@@ -142,6 +143,7 @@ pub unsafe extern "C" fn tcp_handle_send(
     };
 
     println!("Dropping");
+    std::mem::forget(handle);
 
     res
 }
@@ -155,26 +157,33 @@ pub unsafe extern "C" fn tcp_handle_send(
 /// The number of bytes received on success, or 0 on failure.
 /// # Safety
 /// Don't be stupid
-pub unsafe extern "C" fn tcp_handle_recv(handle: *mut PortHandle, to_fill: *mut u8) -> c_uint {
+pub unsafe extern "C" fn tcp_handle_recv(
+    handle: *mut PortHandle,
+    pointer: *mut libc::c_char,
+    len: *mut u32,
+) -> c_uint {
     // Check the handle
     if handle.is_null() {
         return 0;
     }
     let handle = Box::from_raw(handle as *mut PortHandle);
 
-    match handle.recv() {
-        Ok(event) => {
-            match event {
-                crate::event::Event::Transport(_, data) => {
-                    let mut fill_pls = Vec::from_raw_parts(to_fill, data.len(), data.len());
-                    fill_pls.extend_from_slice(&data);
-                    data.len() as c_uint
-                }
-                _ => 0,
+    let res = match handle.recv() {
+        Ok(event) => match event {
+            crate::event::Event::Transport(_, data) => {
+                let data: Vec<i8> = data.into_iter().map(|x| x as i8).collect();
+                let mut fill_pls = Vec::from_raw_parts(pointer, data.len(), data.len());
+                fill_pls.extend_from_slice(&data);
+                *len = data.len() as u32;
+                0
             }
-        }
+            _ => 0,
+        },
         Err(_) => 0,
-    }
+    };
+
+    std::mem::forget(handle);
+    res
 }
 
 #[no_mangle]
