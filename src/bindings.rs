@@ -157,7 +157,7 @@ pub unsafe extern "C" fn tcp_handle_send(
 pub unsafe extern "C" fn tcp_handle_recv(
     handle: *mut PortHandle,
     pointer: *mut c_char,
-    len: *mut u32,
+    len: u32,
 ) -> c_int {
     // Check the handle
     if handle.is_null() {
@@ -170,10 +170,16 @@ pub unsafe extern "C" fn tcp_handle_recv(
     let res = match handle.recv() {
         Ok(event) => match event {
             crate::event::Event::Transport(_, data) => {
-                let data: Vec<c_char> = data.into_iter().map(|x| x as c_char).collect();
-                let mut fill_pls = Vec::from_raw_parts(pointer, data.len(), data.len());
-                fill_pls.extend_from_slice(&data);
-                *len = data.len() as u32;
+                let mut fill_pls = c_vec::CVec::new(pointer, data.len());
+                for i in 0..data.len() {
+                    if i > len as usize {
+                        continue;
+                    }
+                    fill_pls[i] = data[i] as c_char
+                }
+
+                println!("Forgetting the CVec");
+                std::mem::forget(fill_pls);
                 0
             }
             _ => 0,

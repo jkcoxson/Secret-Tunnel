@@ -17,6 +17,7 @@ lazy_static = { version = "1.4.0" }
 
 rand = { version = "0.8.5" }
 libc = { version = "0.2.126" }
+c_vec = { version = "2.0.0" }
 
 [build-dependencies]
 cbindgen = { version = "0.24.3" }
