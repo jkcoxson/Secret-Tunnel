@@ -23,12 +23,8 @@ impl PortHandle {
     }
     pub fn send(&self, payload: Vec<u8>) -> Result<(), SendError<Event>> {
         println!("Sending: {:?}", payload);
-        let res = self
-            .outgoing
-            .send(Event::Transport(self.internal_port, payload));
-
-        println!("Returning from handle send");
-        res
+        self.outgoing
+            .send(Event::Transport(self.internal_port, payload))
     }
     pub fn close(&self) {
         self.outgoing.send(Event::Closed).unwrap();

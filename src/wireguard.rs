@@ -42,6 +42,7 @@ impl Wireguard {
     }
 
     pub fn stop(&self) {
+        println!("Stopping self");
         self.sender.send(event::Event::Stop).unwrap();
     }
 
