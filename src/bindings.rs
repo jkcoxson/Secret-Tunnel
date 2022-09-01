@@ -180,7 +180,6 @@ pub unsafe extern "C" fn tcp_handle_recv(
 
     // Determine if we need any more bytes
     loop {
-        println!("Waiting for bytes, we're at {} of {}", to_return.len(), len);
         if to_return.len() != len as usize {
             match handle.recv() {
                 Ok(event) => match event {
