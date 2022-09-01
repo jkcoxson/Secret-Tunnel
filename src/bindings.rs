@@ -77,6 +77,7 @@ pub unsafe extern "C" fn connect_tcp(wireguard: *mut Wireguard, port: u16) -> *m
                 Some(wg) => Box::new(wg.clone()),
                 None => {
                     // Create a new one
+                    simple_logger::init_with_level(log::Level::Info).unwrap();
                     let created_wg = Wireguard::new(SocketAddrV4::new(
                         std::net::Ipv4Addr::new(0, 0, 0, 0),
                         51820,
@@ -166,16 +167,18 @@ pub unsafe extern "C" fn tcp_handle_recv(
     }
     let handle = Box::from_raw(handle as *mut PortHandle);
 
+    info!("Attempting to receive {} bytes", len);
+
     let res = match handle.recv() {
         Ok(event) => match event {
             crate::event::Event::Transport(_, data) => {
                 let mut fill_pls = c_vec::CVec::new(pointer, data.len());
                 for i in 0..data.len() {
                     if i > len as usize {
-                        info!("SKIP");
+                        // info!("SKIP");
                         continue;
                     }
-                    info!("ADDING");
+                    // info!("ADDING");
                     fill_pls[i] = data[i] as c_char
                 }
 
@@ -190,7 +193,7 @@ pub unsafe extern "C" fn tcp_handle_recv(
 
                 info!("Forgetting the CVec");
                 std::mem::forget(fill_pls);
-                0
+                data.len() as i32
             }
             _ => 0,
         },
