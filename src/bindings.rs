@@ -173,10 +173,14 @@ pub unsafe extern "C" fn tcp_handle_recv(
     // Check if we have unused data in the buffer
     while !handle.buffer.is_empty() {
         to_return.push(handle.buffer.remove(0));
+        if to_return.len() == len as usize {
+            break;
+        }
     }
 
     // Determine if we need any more bytes
     loop {
+        println!("Waiting for bytes, we're at {} of {}", to_return.len(), len);
         if to_return.len() != len as usize {
             match handle.recv() {
                 Ok(event) => match event {
