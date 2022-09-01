@@ -14,9 +14,10 @@ It tricks lockdownd into thinking it's not a loopback connection using Wireguard
 1. Listens on a port for incoming Wireguard connections
 2. Handshakes with Wireguard
 3. Create and send fake IP/TCP packets to Wireguard
-4. Adapt libimobiledevice to use the fake IP/TCP packets
+4. Adapt [libimobiledevice](https://github.com/jkcoxson/libimobiledevice) to use the fake IP/TCP packets
 5. Profit
-**Completeness: 3/5**
+
+**Completeness: 5/5**
 
 # TCP Stack
 The TCP stack is a barebones implementation of a TCP/IP stack. It makes many assumptions about the reliability of the underlying transport layer, and makes little effort to handle any errors.
