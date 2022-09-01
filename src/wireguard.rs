@@ -74,6 +74,7 @@ impl Wireguard {
             external_port: port,
             outgoing: self.sender.clone(),
             incoming: receiver,
+            buffer: vec![],
         })
     }
 }

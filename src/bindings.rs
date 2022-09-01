@@ -165,43 +165,51 @@ pub unsafe extern "C" fn tcp_handle_recv(
     if handle.is_null() {
         return -1;
     }
-    let handle = Box::from_raw(handle as *mut PortHandle);
+    let mut handle = Box::from_raw(handle as *mut PortHandle);
 
     info!("Attempting to receive {} bytes", len);
+    let mut to_return = vec![];
 
-    let res = match handle.recv() {
-        Ok(event) => match event {
-            crate::event::Event::Transport(_, data) => {
-                let mut fill_pls = c_vec::CVec::new(pointer, data.len());
-                for i in 0..data.len() {
-                    if i > len as usize {
-                        // info!("SKIP");
-                        continue;
+    // Check if we have unused data in the buffer
+    while !handle.buffer.is_empty() {
+        to_return.push(handle.buffer.remove(0));
+    }
+
+    // Determine if we need any more bytes
+    loop {
+        if to_return.len() != len as usize {
+            match handle.recv() {
+                Ok(event) => match event {
+                    crate::event::Event::Transport(_, data) => {
+                        for i in data {
+                            if to_return.len() != len as usize {
+                                to_return.push(i)
+                            } else {
+                                handle.buffer.push(i);
+                            }
+                        }
                     }
-                    // info!("ADDING");
-                    fill_pls[i] = data[i] as c_char
+                    _ => {
+                        return -1;
+                    }
+                },
+                Err(_) => {
+                    return -1;
                 }
-
-                info!(
-                    "Returning {:02X?}",
-                    fill_pls
-                        .as_cslice()
-                        .iter()
-                        .map(|x| { *x as i8 })
-                        .collect::<Vec<i8>>()
-                );
-
-                info!("Forgetting the CVec");
-                std::mem::forget(fill_pls);
-                data.len() as i32
             }
-            _ => 0,
-        },
-        Err(_) => 0,
-    };
+        } else {
+            break;
+        }
+    }
 
+    let mut fill_pls = c_vec::CVec::new(pointer, len as usize);
+    for i in 0..to_return.len() {
+        fill_pls[i] = to_return[i] as c_char
+    }
+
+    std::mem::forget(fill_pls);
     std::mem::forget(handle);
-    res
+    len as c_int
 }
 
 #[no_mangle]

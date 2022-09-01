@@ -13,6 +13,9 @@ pub struct PortHandle {
     pub external_port: u16,
     pub outgoing: crossbeam_channel::Sender<Event>,
     pub incoming: crossbeam_channel::Receiver<Event>,
+
+    /// Used for FFI
+    pub buffer: Vec<u8>,
 }
 
 impl PortHandle {
