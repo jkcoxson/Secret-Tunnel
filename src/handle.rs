@@ -3,6 +3,7 @@
 use std::fmt::Debug;
 
 use crossbeam_channel::{RecvError, SendError, TryRecvError};
+use log::info;
 
 use crate::event::Event;
 
@@ -22,7 +23,7 @@ impl PortHandle {
         self.incoming.try_recv()
     }
     pub fn send(&self, payload: Vec<u8>) -> Result<(), SendError<Event>> {
-        println!("Sending: {:?}", payload);
+        info!("Sending: {:?}", payload);
         self.outgoing
             .send(Event::Transport(self.internal_port, payload))
     }

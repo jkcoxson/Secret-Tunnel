@@ -9,6 +9,7 @@ use std::{
 
 use lazy_static::lazy_static;
 use libc::c_int;
+use log::{info, warn};
 
 use crate::{handle::PortHandle, wireguard::Wireguard};
 
@@ -48,7 +49,7 @@ pub extern "C" fn new_wireguard(address: *const c_char) -> *mut c_void {
 /// # Safety
 /// Don't be stupid
 pub unsafe extern "C" fn free_wireguard(handle: *mut Wireguard) {
-    println!("WARNING: FREEING WIREGUARD");
+    warn!("FREEING WIREGUARD");
     if handle.is_null() {
         if let Ok(mut wg) = WG.lock() {
             *wg = None;
@@ -165,20 +166,29 @@ pub unsafe extern "C" fn tcp_handle_recv(
     }
     let handle = Box::from_raw(handle as *mut PortHandle);
 
-    println!("Receiving from TCP");
-
     let res = match handle.recv() {
         Ok(event) => match event {
             crate::event::Event::Transport(_, data) => {
                 let mut fill_pls = c_vec::CVec::new(pointer, data.len());
                 for i in 0..data.len() {
                     if i > len as usize {
+                        info!("SKIP");
                         continue;
                     }
+                    info!("ADDING");
                     fill_pls[i] = data[i] as c_char
                 }
 
-                println!("Forgetting the CVec");
+                info!(
+                    "Returning {:02X?}",
+                    fill_pls
+                        .as_cslice()
+                        .iter()
+                        .map(|x| { *x as i8 })
+                        .collect::<Vec<i8>>()
+                );
+
+                info!("Forgetting the CVec");
                 std::mem::forget(fill_pls);
                 0
             }
@@ -195,4 +205,33 @@ pub unsafe extern "C" fn tcp_handle_recv(
 /// Test function for bindings.
 pub extern "C" fn test() {
     println!("Hello from Rust!");
+}
+
+/// Initialize the logger
+/// # Arguments
+/// *level*
+///
+/// 1 => Error,
+///
+/// 2 => :Warn,
+///
+/// 3 => Info,
+///
+/// 4 => Debug,
+///
+/// 5 => Trace,
+/// # Returns
+/// 0 on success, -1 on failure
+pub extern "C" fn init_logger(level: libc::c_uint) -> libc::c_int {
+    match simple_logger::init_with_level(match level {
+        1 => log::Level::Error,
+        2 => log::Level::Warn,
+        3 => log::Level::Info,
+        4 => log::Level::Debug,
+        5 => log::Level::Trace,
+        _ => return -1,
+    }) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
 }

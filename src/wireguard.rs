@@ -2,6 +2,7 @@
 // Holds stuff for maintaining a Wireguard connection
 
 use boringtun::crypto::{X25519PublicKey, X25519SecretKey};
+use log::{error, info, warn};
 use std::collections::HashMap;
 use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
@@ -36,19 +37,19 @@ impl Wireguard {
 
         // Wait until we're ready to return
         ready.recv().unwrap();
-        println!("WireGuard is ready");
+        info!("WireGuard is ready");
 
         Wireguard { sender }
     }
 
     pub fn stop(&self) {
-        println!("Stopping self");
+        warn!("Stopping self");
         self.sender.send(event::Event::Stop).unwrap();
     }
 
     /// Opens a new TCP connection
     pub fn tcp_connect(&self, port: u16) -> Result<handle::PortHandle, std::io::Error> {
-        println!("Connecting to port {}", port);
+        info!("Connecting to port {}", port);
 
         // Create a channel to send events to
         let (sender, receiver) = crossbeam_channel::unbounded();
@@ -59,13 +60,13 @@ impl Wireguard {
             .unwrap();
 
         // Wait to get the internal port
-        println!("Waiting to receive internal port");
+        info!("Waiting to receive internal port");
         let internal_port = match receiver.recv().unwrap() {
             event::Event::Port(port) => port,
             event::Event::Error(err) => return Err(err),
             _ => unreachable!(),
         };
-        println!("Got internal port");
+        info!("Got internal port");
 
         // Return the handle
         Ok(handle::PortHandle {
@@ -161,7 +162,7 @@ fn wg_thread(
                         }
                     }
                     boringtun::noise::TunnResult::WriteToTunnelV4(b, addr) => {
-                        println!("\n{:02X?}\n", b);
+                        info!("Incoming:\n{:02X?}\n", b);
 
                         // Parse the bytes as an IP packet
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();
@@ -171,11 +172,11 @@ fn wg_thread(
                             etherparse::InternetSlice::Ipv6(_, _) => panic!("IPv6 not supported"),
                         };
                         if peer_vpn_ip.is_none() {
-                            println!("Filling in peer VPN IP: {:?}", incoming_ip.source_addr());
+                            info!("Filling in peer VPN IP: {:?}", incoming_ip.source_addr());
                             peer_vpn_ip = Some(incoming_ip.source_addr());
                         }
                         if self_ip.is_none() {
-                            println!("Filling in self IP: {:?}", incoming_ip.destination_addr());
+                            info!("Filling in self IP: {:?}", incoming_ip.destination_addr());
                             self_ip = Some(incoming_ip.destination_addr());
                         }
 
@@ -213,13 +214,13 @@ fn wg_thread(
                                         socket.send_to(b, endpoint).unwrap();
                                     }
                                     _ => {
-                                        println!("Unexpected result");
+                                        warn!("Unexpected result");
                                     }
                                 }
                             }
                             etherparse::TransportSlice::Icmpv6(_) => unimplemented!(),
                             etherparse::TransportSlice::Udp(_) => {
-                                println!("UDP not implemented");
+                                error!("UDP not implemented");
                             }
                             etherparse::TransportSlice::Tcp(tcp_packet) => {
                                 // Determine if the destination is a port we're listening on
@@ -236,7 +237,7 @@ fn wg_thread(
                                     if tcp_packet.syn() {
                                         // Syn is special: it has a phantom data byte so we increase ack by 1
                                         handle.ack = tcp_packet.sequence_number() + 1;
-                                        println!("Setting ack to {}", handle.ack);
+                                        info!("Setting ack to {}", handle.ack);
 
                                         // Ack it
                                         let mut pkt_buf = [0u8; 1500];
@@ -253,7 +254,7 @@ fn wg_thread(
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
                                             _ => {
-                                                println!("Unexpected result");
+                                                warn!("Unexpected result");
                                             }
                                         }
 
@@ -268,7 +269,7 @@ fn wg_thread(
 
                                     // Check the sequence number
                                     if tcp_packet.sequence_number() != handle.ack {
-                                        println!("Unexpected sequence number");
+                                        warn!("Unexpected sequence number");
                                         // Ack the old packet to request a retransmission
                                         let mut pkt_buf = [0u8; 1500];
                                         let pkt = packet_builder!(
@@ -284,7 +285,7 @@ fn wg_thread(
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
                                             _ => {
-                                                println!("Unexpected result");
+                                                warn!("Unexpected result");
                                             }
                                         }
                                         continue;
@@ -320,7 +321,7 @@ fn wg_thread(
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
                                             _ => {
-                                                println!("Unexpected result");
+                                                warn!("Unexpected result");
                                             }
                                         }
                                     }
@@ -342,7 +343,7 @@ fn wg_thread(
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
                                             _ => {
-                                                println!("Unexpected result");
+                                                warn!("Unexpected result");
                                             }
                                         }
 
@@ -361,7 +362,7 @@ fn wg_thread(
                                                 socket.send_to(b, endpoint).unwrap();
                                             }
                                             _ => {
-                                                println!("Unexpected result");
+                                                warn!("Unexpected result");
                                             }
                                         }
 
@@ -369,7 +370,7 @@ fn wg_thread(
                                         let _ = handle.outgoing.send(event::Event::Closed);
                                     }
                                 } else {
-                                    println!("Unknown port: {}", destination_port);
+                                    warn!("Unknown port: {}", destination_port);
                                 }
                             }
                             etherparse::TransportSlice::Unknown(_) => todo!(),
@@ -384,7 +385,7 @@ fn wg_thread(
                 std::io::ErrorKind::WouldBlock => {}
                 std::io::ErrorKind::TimedOut => {}
                 _ => {
-                    println!("Error receiving: {}", e);
+                    error!("Error receiving: {}", e);
                     return;
                 }
             },
@@ -404,7 +405,7 @@ fn wg_thread(
                         let handle = match handles.get_mut(&internal_port) {
                             Some(handle) => handle,
                             None => {
-                                println!("Unknown port: {}", internal_port);
+                                warn!("Unknown port: {}", internal_port);
                                 continue;
                             }
                         };
@@ -427,14 +428,14 @@ fn wg_thread(
                                         socket.send_to(b, peer_ip.unwrap()).unwrap();
                                     }
                                     _ => {
-                                        println!("Unexpected result");
+                                        warn!("Unexpected result");
                                     }
                                 }
                             }
                         }
                     }
                     event::Event::NewTcp(external_port, sender) => {
-                        println!("Creating TCP connection: {}", external_port);
+                        info!("Creating TCP connection: {}", external_port);
                         // Randomly generate a port not in use
                         let mut port;
                         loop {
@@ -467,7 +468,7 @@ fn wg_thread(
                                 socket.send_to(b, peer_ip.unwrap()).unwrap();
                             }
                             _ => {
-                                println!("Unexpected result");
+                                warn!("Unexpected result");
                             }
                         }
 
@@ -478,17 +479,17 @@ fn wg_thread(
                         handles.insert(port, handle::InternalHandle::Tcp(handle));
                     }
                     event::Event::Stop => {
-                        println!("Stopping Wireguard server...");
+                        warn!("Stopping Wireguard server...");
                         return;
                     }
                     _ => {
-                        println!("This should never happen, errors only go out");
+                        error!("This should never happen, errors only go out");
                     }
                 }
             }
             Err(crossbeam_channel::TryRecvError::Empty) => {}
             Err(crossbeam_channel::TryRecvError::Disconnected) => {
-                println!("Channel disconnected");
+                warn!("Channel disconnected");
             }
         }
     }
