@@ -9,7 +9,7 @@ use std::{
 
 use lazy_static::lazy_static;
 use libc::c_int;
-use log::{info, warn};
+use log::{error, info, warn};
 
 use crate::{handle::PortHandle, wireguard::Wireguard};
 
@@ -40,6 +40,43 @@ pub extern "C" fn new_wireguard(address: *const c_char) -> *mut c_void {
     };
 
     Box::into_raw(Box::new(Wireguard::new(address))) as *mut c_void
+}
+
+#[no_mangle]
+/// Initializes a static Wireguard instance that is stored globally. Blocks until a Wireguard handshake is made.
+/// # Arguments
+/// * `address` - The address to listen on. Usually `127.0.0.1:51820`.
+/// # Returns
+/// 0 on success
+pub extern "C" fn init_static_wireguard(address: *const c_char) -> c_int {
+    // Check the address
+    if address.is_null() {
+        return -1;
+    }
+
+    let address = unsafe { CStr::from_ptr(address as *mut _) };
+    let address = match address.to_str() {
+        Ok(address) => address,
+        Err(_) => return -1,
+    };
+    let address = match address.parse::<SocketAddrV4>() {
+        Ok(address) => address,
+        Err(_) => return -1,
+    };
+
+    let wg = Wireguard::new(address);
+
+    let mut lock = match WG.lock() {
+        Ok(l) => l,
+        Err(_) => {
+            error!("Static Wireguard is poisoned!");
+            return -1;
+        }
+    };
+
+    *lock = Some(wg);
+
+    0
 }
 
 #[no_mangle]
@@ -221,6 +258,7 @@ pub extern "C" fn test() {
     println!("Hello from Rust!");
 }
 
+#[no_mangle]
 /// Initialize the logger
 /// # Arguments
 /// *level*
