@@ -287,3 +287,13 @@ pub extern "C" fn init_logger(level: libc::c_uint) -> libc::c_int {
         Err(_) => -1,
     }
 }
+
+#[no_mangle]
+/// Starts the muxer and heartbeat client
+/// # Arguments
+/// Pairing file as a list of chars terminated by null
+/// # Safety
+/// Don't be stupid
+pub unsafe extern "C" fn start_usbmuxd(pairing_file: *mut libc::c_char) -> libc::c_int {
+    minimuxer::minimuxer_c_start(pairing_file)
+}
