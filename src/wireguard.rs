@@ -44,7 +44,10 @@ impl Wireguard {
 
     pub fn stop(&self) {
         warn!("Stopping self");
-        self.sender.send(event::Event::Stop).unwrap();
+        match self.sender.send(event::Event::Stop) {
+            Ok(_) => {}
+            Err(e) => error!("Failed to send stop to Wireguard: {:?}", e),
+        }
     }
 
     /// Opens a new TCP connection
@@ -76,12 +79,6 @@ impl Wireguard {
             incoming: receiver,
             buffer: vec![],
         })
-    }
-}
-
-impl Drop for Wireguard {
-    fn drop(&mut self) {
-        self.stop();
     }
 }
 
@@ -481,7 +478,7 @@ fn wg_thread(
                     }
                     event::Event::Stop => {
                         warn!("Stopping Wireguard server...");
-                        return;
+                        // return;
                     }
                     _ => {
                         error!("This should never happen, errors only go out");
