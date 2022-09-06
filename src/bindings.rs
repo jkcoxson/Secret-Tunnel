@@ -427,36 +427,39 @@ pub unsafe extern "C" fn ping_wireguard_background(
         Err(_) => return,
     };
 
-    let wireguard = if wireguard.is_null() {
-        // See if we have a static pointer
-        match WG.lock() {
-            Ok(mut wg) => match wg.clone().as_mut() {
-                Some(wg) => Box::new(wg.clone()),
-                None => {
-                    // Create a new one
-                    if simple_logger::init_with_level(log::Level::Info).is_ok() {
-                        info!("Logger initialized")
-                    }
-                    let created_wg = Wireguard::new(SocketAddrV4::new(
-                        std::net::Ipv4Addr::new(0, 0, 0, 0),
-                        51820,
-                    ));
-
-                    // Store it
-                    *wg = Some(created_wg.clone());
-
-                    Box::new(created_wg)
-                }
-            },
-            Err(_) => return,
-        }
+    let wg_pls = if wireguard.is_null() {
+        None
     } else {
-        Box::from_raw(wireguard)
+        Some(Box::from_raw(wireguard))
     };
 
-    let wg2 = wireguard.clone();
-
     std::thread::spawn(move || {
+        let wireguard = if let Some(wg) = wg_pls {
+            wg
+        } else {
+            match WG.lock() {
+                Ok(mut wg) => match wg.clone().as_mut() {
+                    Some(wg) => Box::new(wg.clone()),
+                    None => {
+                        // Create a new one
+                        if simple_logger::init_with_level(log::Level::Info).is_ok() {
+                            info!("Logger initialized")
+                        }
+                        let created_wg = Wireguard::new(SocketAddrV4::new(
+                            std::net::Ipv4Addr::new(0, 0, 0, 0),
+                            51820,
+                        ));
+
+                        // Store it
+                        *wg = Some(created_wg.clone());
+
+                        Box::new(created_wg)
+                    }
+                },
+                Err(_) => return,
+            }
+        };
+
         loop {
             // Yeet UDP packet
             let socket =
@@ -466,14 +469,12 @@ pub unsafe extern "C" fn ping_wireguard_background(
             socket.send(&[69u8; 4]).unwrap();
 
             // Test Wireguard
-            if wg2.ping(std::time::Duration::from_millis(1000)) {
+            if wireguard.ping(std::time::Duration::from_millis(1000)) {
                 break;
             } else {
                 info!("Wireguard didn't respond in time, trying again")
             };
         }
-        std::mem::forget(wg2);
+        std::mem::forget(wireguard);
     });
-
-    std::mem::forget(wireguard);
 }
