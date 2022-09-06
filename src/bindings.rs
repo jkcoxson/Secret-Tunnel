@@ -317,3 +317,9 @@ pub unsafe extern "C" fn minimuxer_debug_app(app_id: *mut libc::c_char) -> libc:
 
     minimuxer::tools::enable_jit(app_id)
 }
+
+#[no_mangle]
+/// Sets the current environment variable for libusbmuxd to localhost
+pub extern "C" fn target_minimuxer_address() {
+    std::env::set_var("USBMUXD_SOCKET_ADDRESS", "127.0.0.1:27015");
+}
