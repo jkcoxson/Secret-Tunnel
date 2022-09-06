@@ -1,5 +1,12 @@
 // Jackson Coxson
 
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+
 typedef struct PortHandle PortHandle;
 
 typedef struct Wireguard Wireguard;
@@ -54,6 +61,13 @@ int init_logger(unsigned int level);
 int init_static_wireguard(const char *address);
 
 /**
+ * Debugs an app from an app ID
+ * # Safety
+ * Don't be stupid
+ */
+int minimuxer_debug_app(char *app_id);
+
+/**
  * Creates a new Wireguard instance. This is blocking until a successful handshake!!
  * # Arguments
  * * `address` - The address to listen on. Usually `127.0.0.1:51820`.
@@ -70,6 +84,11 @@ void *new_wireguard(const char *address);
  * Don't be stupid
  */
 int start_usbmuxd(char *pairing_file);
+
+/**
+ * Sets the current environment variable for libusbmuxd to localhost
+ */
+void target_minimuxer_address(void);
 
 /**
  * Receives data from the client through the handle.
