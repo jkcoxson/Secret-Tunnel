@@ -77,6 +77,13 @@ int minimuxer_debug_app(char *app_id);
 void *new_wireguard(const char *address);
 
 /**
+ * Pings secret tunnel until it responds
+ * # Safety
+ * Don't be stupid
+ */
+void ping_wireguard_threaded(char *host);
+
+/**
  * Starts the muxer and heartbeat client
  * # Arguments
  * Pairing file as a list of chars terminated by null

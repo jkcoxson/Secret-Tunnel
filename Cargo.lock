@@ -647,6 +647,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0a7ae3ac2f1173085d398531c705756c94a4c56843785df85a60c1a0afac116"
 
 [[package]]
+name = "ping"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69044d1c00894fc1f43d9485aadb6ab6e68df90608fa52cf1074cda6420c6b76"
+dependencies = [
+ "rand",
+ "socket2",
+ "thiserror",
+]
+
+[[package]]
 name = "plist_plus"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -912,6 +923,7 @@ dependencies = [
  "log",
  "minimuxer",
  "packet-builder",
+ "ping",
  "pnet",
  "rand",
  "simple_logger",
@@ -981,6 +993,16 @@ name = "smallvec"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2dd574626839106c320a323308629dcb1acfc96e32a8cba364ddc61ac23ee83"
+
+[[package]]
+name = "socket2"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02e2d2db9033d13a1567121ddd7a095ee144db4e1ca1b1bda3419bc0da294ebd"
+dependencies = [
+ "libc",
+ "winapi",
+]
 
 [[package]]
 name = "spin"

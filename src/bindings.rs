@@ -323,3 +323,43 @@ pub unsafe extern "C" fn minimuxer_debug_app(app_id: *mut libc::c_char) -> libc:
 pub extern "C" fn target_minimuxer_address() {
     std::env::set_var("USBMUXD_SOCKET_ADDRESS", "127.0.0.1:27015");
 }
+
+#[no_mangle]
+/// Pings secret tunnel until it responds
+/// # Safety
+/// Don't be stupid
+pub unsafe extern "C" fn ping_wireguard_threaded(host: *mut libc::c_char) {
+    if host.is_null() {
+        return;
+    }
+
+    let c_str = std::ffi::CStr::from_ptr(host);
+
+    let host = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return,
+    }
+    .to_string();
+
+    let host = match host.parse() {
+        Ok(h) => h,
+        Err(_) => return,
+    };
+
+    let timeout = std::time::Duration::from_millis(100);
+
+    std::thread::spawn(move || loop {
+        info!("Trying to ping!");
+        match ping::ping(
+            host,
+            Some(timeout),
+            Some(166),
+            Some(3),
+            Some(5),
+            Some(&[7u8; 24]),
+        ) {
+            Ok(_) => break,
+            Err(_) => continue,
+        }
+    });
+}
