@@ -80,6 +80,18 @@ impl Wireguard {
             buffer: vec![],
         })
     }
+
+    /// Tests if the Wireguard thread is running
+    pub fn ping(&self, timeout: std::time::Duration) -> bool {
+        let (tx, rx) = crossbeam_channel::bounded(1);
+
+        match self.sender.send(event::Event::Ping(tx)) {
+            Ok(_) => (),
+            Err(_) => return false,
+        }
+
+        rx.recv_timeout(timeout).is_ok()
+    }
 }
 
 fn wg_thread(
@@ -480,6 +492,10 @@ fn wg_thread(
                         warn!("Stopping Wireguard server...");
                         // return;
                     }
+                    event::Event::Ping(sender) => match sender.send(()) {
+                        Ok(_) => {}
+                        Err(_) => warn!("Failed to respond to ping"),
+                    },
                     _ => {
                         error!("This should never happen, errors only go out");
                     }

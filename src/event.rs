@@ -18,4 +18,6 @@ pub enum Event {
     WireguardReady,
     /// Stop all threads
     Stop,
+    /// Test Wireguard
+    Ping(crossbeam_channel::Sender<()>),
 }

@@ -114,7 +114,9 @@ pub unsafe extern "C" fn connect_tcp(wireguard: *mut Wireguard, port: u16) -> *m
                 Some(wg) => Box::new(wg.clone()),
                 None => {
                     // Create a new one
-                    simple_logger::init_with_level(log::Level::Info).unwrap();
+                    if simple_logger::init_with_level(log::Level::Info).is_ok() {
+                        info!("Logger initialized")
+                    }
                     let created_wg = Wireguard::new(SocketAddrV4::new(
                         std::net::Ipv4Addr::new(0, 0, 0, 0),
                         51820,
@@ -325,10 +327,89 @@ pub extern "C" fn target_minimuxer_address() {
 }
 
 #[no_mangle]
-/// Pings secret tunnel until it responds
+/// Tests if Wireguard is active
+/// # Arguments
+/// * `handle` - The handle to Wireguard.
+/// * `host` - The IP that secret tunnel is running on or should run on.
+/// * `timeout` - The time in miliseconds to wait for Wireguard to respond.
 /// # Safety
 /// Don't be stupid
-pub unsafe extern "C" fn ping_wireguard_threaded(host: *mut libc::c_char) {
+pub unsafe extern "C" fn test_wireguard_availability(
+    wireguard: *mut Wireguard,
+    host: *mut libc::c_char,
+    timeout: libc::c_uint,
+) -> libc::c_int {
+    if host.is_null() {
+        return -1;
+    }
+
+    let c_str = std::ffi::CStr::from_ptr(host);
+
+    let host = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return -1,
+    }
+    .to_string();
+
+    let host: std::net::IpAddr = match host.parse() {
+        Ok(h) => h,
+        Err(_) => return -1,
+    };
+
+    let wireguard = if wireguard.is_null() {
+        // See if we have a static pointer
+        match WG.lock() {
+            Ok(mut wg) => match wg.clone().as_mut() {
+                Some(wg) => Box::new(wg.clone()),
+                None => {
+                    // Create a new one
+                    if simple_logger::init_with_level(log::Level::Info).is_ok() {
+                        info!("Logger initialized")
+                    }
+                    let created_wg = Wireguard::new(SocketAddrV4::new(
+                        std::net::Ipv4Addr::new(0, 0, 0, 0),
+                        51820,
+                    ));
+
+                    // Store it
+                    *wg = Some(created_wg.clone());
+
+                    Box::new(created_wg)
+                }
+            },
+            Err(_) => return -1,
+        }
+    } else {
+        Box::from_raw(wireguard)
+    };
+
+    let timeout = std::time::Duration::from_millis(timeout as u64);
+
+    // Yeet UDP packet
+    let socket =
+        std::net::UdpSocket::bind("0.0.0.0:3401".parse::<std::net::SocketAddr>().unwrap()).unwrap();
+    socket.connect((host, 6969)).unwrap();
+    socket.send(&[69u8; 4]).unwrap();
+
+    // Test Wireguard
+    let res = if wireguard.ping(timeout) { 0 } else { -1 };
+
+    std::mem::forget(wireguard);
+
+    res
+}
+
+#[no_mangle]
+/// Pings Wireguard until it responds in the background
+/// # Arguments
+/// * `handle` - The handle to Wireguard.
+/// * `host` - The IP that secret tunnel is running on or should run on.
+/// # Safety
+/// Don't be stupid
+pub unsafe extern "C" fn ping_wireguard_background(
+    wireguard: *mut Wireguard,
+    host: *mut libc::c_char,
+) {
     if host.is_null() {
         return;
     }
@@ -341,25 +422,58 @@ pub unsafe extern "C" fn ping_wireguard_threaded(host: *mut libc::c_char) {
     }
     .to_string();
 
-    let host = match host.parse() {
+    let host: std::net::IpAddr = match host.parse() {
         Ok(h) => h,
         Err(_) => return,
     };
 
-    let timeout = std::time::Duration::from_millis(100);
+    let wireguard = if wireguard.is_null() {
+        // See if we have a static pointer
+        match WG.lock() {
+            Ok(mut wg) => match wg.clone().as_mut() {
+                Some(wg) => Box::new(wg.clone()),
+                None => {
+                    // Create a new one
+                    if simple_logger::init_with_level(log::Level::Info).is_ok() {
+                        info!("Logger initialized")
+                    }
+                    let created_wg = Wireguard::new(SocketAddrV4::new(
+                        std::net::Ipv4Addr::new(0, 0, 0, 0),
+                        51820,
+                    ));
 
-    std::thread::spawn(move || loop {
-        info!("Trying to ping!");
-        match ping::ping(
-            host,
-            Some(timeout),
-            Some(166),
-            Some(3),
-            Some(5),
-            Some(&[7u8; 24]),
-        ) {
-            Ok(_) => break,
-            Err(_) => continue,
+                    // Store it
+                    *wg = Some(created_wg.clone());
+
+                    Box::new(created_wg)
+                }
+            },
+            Err(_) => return,
         }
+    } else {
+        Box::from_raw(wireguard)
+    };
+
+    let wg2 = wireguard.clone();
+
+    std::thread::spawn(move || {
+        loop {
+            // Yeet UDP packet
+            let socket =
+                std::net::UdpSocket::bind("0.0.0.0:3401".parse::<std::net::SocketAddr>().unwrap())
+                    .unwrap();
+            socket.connect((host, 6969)).unwrap();
+            socket.send(&[69u8; 4]).unwrap();
+
+            // Test Wireguard
+            if wg2.ping(std::time::Duration::from_millis(1000)) {
+                break;
+            } else {
+                info!("Wireguard didn't respond in time, trying again")
+            };
+        }
+        std::mem::forget(wg2);
     });
+
+    std::mem::forget(wireguard);
 }
