@@ -77,11 +77,14 @@ int minimuxer_debug_app(char *app_id);
 void *new_wireguard(const char *address);
 
 /**
- * Pings secret tunnel until it responds
+ * Pings Wireguard until it responds in the background
+ * # Arguments
+ * * `handle` - The handle to Wireguard.
+ * * `host` - The IP that secret tunnel is running on or should run on.
  * # Safety
  * Don't be stupid
  */
-void ping_wireguard_threaded(char *host);
+void ping_wireguard_background(struct Wireguard *wireguard, char *host);
 
 /**
  * Starts the muxer and heartbeat client
@@ -126,3 +129,14 @@ unsigned int tcp_handle_send(struct PortHandle *handle, const uint8_t *pointer, 
  * Test function for bindings.
  */
 void test(void);
+
+/**
+ * Tests if Wireguard is active
+ * # Arguments
+ * * `handle` - The handle to Wireguard.
+ * * `host` - The IP that secret tunnel is running on or should run on.
+ * * `timeout` - The time in miliseconds to wait for Wireguard to respond.
+ * # Safety
+ * Don't be stupid
+ */
+int test_wireguard_availability(struct Wireguard *wireguard, char *host, unsigned int timeout);
