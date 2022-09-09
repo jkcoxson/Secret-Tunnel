@@ -144,6 +144,13 @@ mod tests {
             51820,
         ));
 
+        // Ping the server
+        let _ = std::process::Command::new("ping")
+            .arg("-c")
+            .arg("1")
+            .arg("10.7.0.1")
+            .spawn();
+
         let handle = wg.tcp_connect(3000).unwrap();
         handle.close();
 

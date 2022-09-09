@@ -304,6 +304,10 @@ fn wg_thread(
                                     // Check if we got a fin response
                                     if tcp_packet.fin() && handle.fin_state == FinStatus::FirstSent
                                     {
+                                        // Increase ack and seq
+                                        handle.seq = tcp_packet.acknowledgment_number();
+                                        handle.ack = tcp_packet.sequence_number() + 1;
+
                                         // Ack it
                                         let mut pkt_buf = [0u8; 1500];
                                         let pkt = packet_builder!(
@@ -415,7 +419,7 @@ fn wg_thread(
                                                 let pkt = packet_builder!(
                                                     pkt_buf,
                                                     ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                                    tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::RST), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                                    tcp({set_source => tcp_packet.source_port(), set_destination => handle.port, set_flags => (TcpFlags::RST), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
                                                     payload({"".to_string().into_bytes()})
                                                 );
 
@@ -603,7 +607,7 @@ fn wg_thread(
                                 let pkt = packet_builder!(
                                     pkt_buf,
                                     ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                    tcp({set_source => handle.port, set_destination => handle.port, set_flags => (TcpFlags::FIN), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                    tcp({set_source => internal_port, set_destination => handle.port, set_flags => (TcpFlags::FIN | TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
                                     payload({"".to_string().into_bytes()})
                                 );
 
