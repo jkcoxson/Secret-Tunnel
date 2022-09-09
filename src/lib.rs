@@ -74,7 +74,7 @@ mod tests {
                     let position = data[0];
                     handle.send(vec![position + 1]).unwrap();
                 }
-                event::Event::Closed => {
+                event::Event::Closed(_) => {
                     break;
                 }
                 _ => {
@@ -252,7 +252,7 @@ mod tests {
                     collected_tests.push(data);
                     continue;
                 }
-                event::Event::Closed => {
+                event::Event::Closed(_) => {
                     break;
                 }
                 _ => {

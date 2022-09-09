@@ -31,7 +31,9 @@ impl PortHandle {
             .send(Event::Transport(self.internal_port, payload))
     }
     pub fn close(&self) {
-        self.outgoing.send(Event::Closed).unwrap();
+        self.outgoing
+            .send(Event::Closed(self.internal_port))
+            .unwrap();
     }
 }
 
@@ -60,5 +62,12 @@ pub(crate) struct TcpInternal {
     /// Ack number for the next packet
     pub(crate) ack: u32,
     /// The state that a finish is in
-    pub(crate) fin_state: u8,
+    pub(crate) fin_state: FinStatus,
+}
+
+#[derive(PartialEq, Eq)]
+pub(crate) enum FinStatus {
+    FirstSent,
+    FirstReceived,
+    Chill,
 }

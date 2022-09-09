@@ -12,7 +12,7 @@ use pnet::packet::tcp::TcpFlags;
 use pnet::packet::Packet;
 
 use crate::event;
-use crate::handle;
+use crate::handle::{self, FinStatus};
 use crate::packets;
 
 #[derive(Clone)]
@@ -301,6 +301,37 @@ fn wg_thread(
                                         continue;
                                     }
 
+                                    // Check if we got a fin response
+                                    if tcp_packet.fin() && handle.fin_state == FinStatus::FirstSent
+                                    {
+                                        // Ack it
+                                        let mut pkt_buf = [0u8; 1500];
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({"".to_string().into_bytes()})
+                                        );
+
+                                        let mut buf = [0; 2048];
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, endpoint).unwrap();
+                                            }
+                                            _ => {
+                                                warn!("Unexpected result");
+                                            }
+                                        }
+
+                                        // Close it
+                                        match handle.outgoing.send(event::Event::Closed(0)) {
+                                            Ok(_) => {}
+                                            Err(e) => error!("Unable to send to handle: {e}"),
+                                        }
+
+                                        continue;
+                                    }
+
                                     // Receiving data
                                     if tcp_packet.psh() || !ip_packet.payload.is_empty() {
                                         // The next sequence number we expect is the one we just received
@@ -338,69 +369,91 @@ fn wg_thread(
 
                                     // Closing a connection
                                     if tcp_packet.fin() {
-                                        // Make sure that we only receive fin once or RST
-                                        if handle.fin_state != 0 {
-                                            // Send an RST
-                                            let mut pkt_buf = [0u8; 1500];
-                                            let pkt = packet_builder!(
-                                                pkt_buf,
-                                                ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                                tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::RST), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
-                                                payload({"".to_string().into_bytes()})
-                                            );
+                                        match handle.fin_state {
+                                            FinStatus::Chill => {
+                                                handle.fin_state = FinStatus::FirstReceived;
 
-                                            let mut buf = [0; 2048];
-                                            match tun.encapsulate(pkt.packet(), &mut buf) {
-                                                boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                                                    socket.send_to(b, endpoint).unwrap();
+                                                // Send a fin back to the server
+                                                let mut pkt_buf = [0u8; 1500];
+                                                let pkt = packet_builder!(
+                                                    pkt_buf,
+                                                    ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                                    tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::FIN), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                                    payload({"".to_string().into_bytes()})
+                                                );
+
+                                                let mut buf = [0; 2048];
+                                                match tun.encapsulate(pkt.packet(), &mut buf) {
+                                                    boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                        socket.send_to(b, endpoint).unwrap();
+                                                    }
+                                                    _ => {
+                                                        warn!("Unexpected result");
+                                                    }
                                                 }
-                                                _ => {
-                                                    warn!("Unexpected result");
+
+                                                // We'll wait for the ack to our fin to send the close event to the handle
+                                            }
+                                            FinStatus::FirstReceived => {
+                                                // We shouldn't have received another fin request, we already got one
+                                                // Just abort
+                                                let mut pkt_buf = [0u8; 1500];
+                                                let pkt = packet_builder!(
+                                                    pkt_buf,
+                                                    ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                                    tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::RST), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                                    payload({"".to_string().into_bytes()})
+                                                );
+
+                                                let mut buf = [0; 2048];
+                                                match tun.encapsulate(pkt.packet(), &mut buf) {
+                                                    boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                        socket.send_to(b, endpoint).unwrap();
+                                                    }
+                                                    _ => {
+                                                        warn!("Unexpected result");
+                                                    }
                                                 }
+
+                                                match handle.outgoing.send(event::Event::Closed(0))
+                                                {
+                                                    Ok(_) => {}
+                                                    Err(e) => {
+                                                        error!("Unable to send to handle: {e}");
+                                                    }
+                                                }
+                                                continue;
                                             }
-                                            continue;
+                                            FinStatus::FirstSent => {
+                                                // Ack it and close
+                                                let mut pkt_buf = [0u8; 1500];
+                                                let pkt = packet_builder!(
+                                                    pkt_buf,
+                                                    ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                                    tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                                    payload({"".to_string().into_bytes()})
+                                                );
+
+                                                let mut buf = [0; 2048];
+                                                match tun.encapsulate(pkt.packet(), &mut buf) {
+                                                    boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                        socket.send_to(b, endpoint).unwrap();
+                                                    }
+                                                    _ => {
+                                                        warn!("Unexpected result");
+                                                    }
+                                                }
+
+                                                match handle.outgoing.send(event::Event::Closed(0))
+                                                {
+                                                    Ok(_) => {}
+                                                    Err(e) => {
+                                                        error!("Unable to send to handle: {e}");
+                                                    }
+                                                }
+                                                continue;
+                                            }
                                         }
-                                        handle.fin_state = 1;
-                                        // Ack it
-                                        let mut pkt_buf = [0u8; 1500];
-                                        let pkt = packet_builder!(
-                                            pkt_buf,
-                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
-                                            payload({"".to_string().into_bytes()})
-                                        );
-
-                                        let mut buf = [0; 2048];
-                                        match tun.encapsulate(pkt.packet(), &mut buf) {
-                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                                                socket.send_to(b, endpoint).unwrap();
-                                            }
-                                            _ => {
-                                                warn!("Unexpected result");
-                                            }
-                                        }
-
-                                        // Send a fin back to the server
-                                        let mut pkt_buf = [0u8; 1500];
-                                        let pkt = packet_builder!(
-                                            pkt_buf,
-                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                            tcp({set_source => tcp_packet.destination_port(), set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::FIN), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
-                                            payload({"".to_string().into_bytes()})
-                                        );
-
-                                        let mut buf = [0; 2048];
-                                        match tun.encapsulate(pkt.packet(), &mut buf) {
-                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                                                socket.send_to(b, endpoint).unwrap();
-                                            }
-                                            _ => {
-                                                warn!("Unexpected result");
-                                            }
-                                        }
-
-                                        // Send the close event to the handle
-                                        let _ = handle.outgoing.send(event::Event::Closed);
                                     }
                                 } else {
                                     warn!("Unknown port: {}", destination_port);
@@ -484,7 +537,7 @@ fn wg_thread(
                             outgoing: sender,
                             seq: rand::random::<u32>(),
                             ack: 0,
-                            fin_state: 0,
+                            fin_state: FinStatus::Chill,
                         };
 
                         // Create TCP syn packet
@@ -520,6 +573,39 @@ fn wg_thread(
                         Ok(_) => {}
                         Err(_) => warn!("Failed to respond to ping"),
                     },
+                    event::Event::Closed(internal_port) => {
+                        // Send a fin to the target
+                        let handle = match handles.get_mut(&internal_port) {
+                            Some(h) => h,
+                            None => {
+                                error!("No internal port found!!");
+                                continue;
+                            }
+                        };
+
+                        match handle {
+                            handle::InternalHandle::Tcp(handle) => {
+                                let mut pkt_buf = [0u8; 1500];
+                                let pkt = packet_builder!(
+                                    pkt_buf,
+                                    ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                    tcp({set_source => handle.port, set_destination => handle.port, set_flags => (TcpFlags::FIN), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                    payload({"".to_string().into_bytes()})
+                                );
+
+                                let mut buf = [0; 2048];
+                                match tun.encapsulate(pkt.packet(), &mut buf) {
+                                    boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                        socket.send_to(b, peer_ip.unwrap()).unwrap();
+                                    }
+                                    _ => {
+                                        warn!("Unexpected result");
+                                    }
+                                }
+                                handle.fin_state = FinStatus::FirstSent;
+                            }
+                        }
+                    }
                     _ => {
                         error!("This should never happen, errors only go out");
                     }
