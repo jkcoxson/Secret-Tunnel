@@ -187,6 +187,23 @@ pub unsafe extern "C" fn tcp_handle_send(
 }
 
 #[no_mangle]
+/// Closes the TCP connection
+/// # Arguments
+/// * 'handle' - The pointer to the handle.
+/// # Safety
+/// Don't be stupid
+pub unsafe extern "C" fn tcp_handle_close(handle: *mut PortHandle) {
+    // Check the handle
+    if handle.is_null() {
+        return;
+    }
+
+    let handle = Box::from_raw(handle as *mut PortHandle);
+
+    handle.close();
+}
+
+#[no_mangle]
 /// Receives data from the client through the handle.
 /// # Arguments
 /// * 'handle' - The pointer to the handle.

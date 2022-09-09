@@ -101,6 +101,15 @@ int start_usbmuxd(char *pairing_file);
 void target_minimuxer_address(void);
 
 /**
+ * Closes the TCP connection
+ * # Arguments
+ * * 'handle' - The pointer to the handle.
+ * # Safety
+ * Don't be stupid
+ */
+void tcp_handle_close(struct PortHandle *handle);
+
+/**
  * Receives data from the client through the handle.
  * # Arguments
  * * 'handle' - The pointer to the handle.
