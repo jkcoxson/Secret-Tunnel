@@ -332,6 +332,19 @@ fn wg_thread(
                                         continue;
                                     }
 
+                                    // Check if we recieved an ack to our final fin
+                                    if tcp_packet.ack()
+                                        && handle.fin_state == FinStatus::FirstReceived
+                                    {
+                                        // Close it
+                                        match handle.outgoing.send(event::Event::Closed(0)) {
+                                            Ok(_) => {}
+                                            Err(e) => error!("Unable to send to handle: {e}"),
+                                        }
+
+                                        continue;
+                                    }
+
                                     // Receiving data
                                     if tcp_packet.psh() || !ip_packet.payload.is_empty() {
                                         // The next sequence number we expect is the one we just received
@@ -372,6 +385,7 @@ fn wg_thread(
                                         match handle.fin_state {
                                             FinStatus::Chill => {
                                                 handle.fin_state = FinStatus::FirstReceived;
+                                                handle.ack += 1;
 
                                                 // Send a fin back to the server
                                                 let mut pkt_buf = [0u8; 1500];
