@@ -6,6 +6,9 @@ pub mod handle;
 pub mod packets;
 pub mod wireguard;
 
+#[cfg(feature = "minimuxer")]
+pub mod bundle;
+
 #[cfg(test)]
 mod tests {
     use byteorder::{ReadBytesExt, WriteBytesExt};
@@ -121,6 +124,30 @@ mod tests {
 
         assert_eq!(combined_tests, collected_tests);
         println!("All tests passed");
+    }
+
+    #[test]
+    fn local_stop() {
+        let thread = std::thread::spawn(|| {
+            // Create TCP server
+            let listener = std::net::TcpListener::bind("0.0.0.0:3000").unwrap();
+            let (mut stream, _) = listener.accept().unwrap();
+
+            let mut buf = vec![];
+            match std::io::Read::read_to_end(&mut stream, &mut buf) {
+                Ok(_) => {}
+                Err(e) => panic!("{e}"),
+            }
+        });
+        let wg = wireguard::Wireguard::new(SocketAddrV4::new(
+            std::net::Ipv4Addr::new(0, 0, 0, 0),
+            51820,
+        ));
+
+        let handle = wg.tcp_connect(3000).unwrap();
+        handle.close();
+
+        thread.join().unwrap();
     }
 
     #[test]
