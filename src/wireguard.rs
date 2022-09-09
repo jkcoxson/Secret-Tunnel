@@ -58,9 +58,13 @@ impl Wireguard {
         let (sender, receiver) = crossbeam_channel::unbounded();
 
         // Send the event to the thread
-        self.sender
-            .send(event::Event::NewTcp(port, sender))
-            .unwrap();
+        match self.sender.send(event::Event::NewTcp(port, sender)) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Unable to create a new TCP: {e}");
+                return Err(std::io::Error::from_raw_os_error(-1));
+            }
+        }
 
         // Wait to get the internal port
         info!("Waiting to receive internal port");
@@ -356,13 +360,13 @@ fn wg_thread(
                                         handle.ack += ip_packet.payload.len() as u32;
 
                                         // Send the data to the handle
-                                        handle
-                                            .outgoing
-                                            .send(event::Event::Transport(
-                                                0,
-                                                ip_packet.payload.to_vec(),
-                                            ))
-                                            .unwrap();
+                                        match handle.outgoing.send(event::Event::Transport(
+                                            0,
+                                            ip_packet.payload.to_vec(),
+                                        )) {
+                                            Ok(_) => {}
+                                            Err(e) => error!("Unable to forward psh data {e}"),
+                                        }
 
                                         // Ack it
                                         let mut pkt_buf = [0u8; 1500];
