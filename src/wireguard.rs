@@ -514,7 +514,7 @@ fn wg_thread(
                     }
                     event::Event::Stop => {
                         warn!("Stopping Wireguard server...");
-                        // return;
+                        return;
                     }
                     event::Event::Ping(sender) => match sender.send(()) {
                         Ok(_) => {}
