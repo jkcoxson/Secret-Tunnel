@@ -68,6 +68,13 @@ int init_static_wireguard(const char *address);
 int minimuxer_debug_app(char *app_id);
 
 /**
+ * Yeets an ipa to the afc jail
+ * # Safety
+ * Don't be stupid
+ */
+int minimuxer_yeet_app_afc(char *bundle_id, uint8_t *bytes_ptr, unsigned long bytes_len);
+
+/**
  * Creates a new Wireguard instance. This is blocking until a successful handshake!!
  * # Arguments
  * * `address` - The address to listen on. Usually `127.0.0.1:51820`.
