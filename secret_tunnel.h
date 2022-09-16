@@ -68,6 +68,14 @@ int init_static_wireguard(const char *address);
 int minimuxer_debug_app(char *app_id);
 
 /**
+ * Installs an ipa with a bundle ID
+ * Expects the ipa to be in the afc jail from yeet_app_afc
+ * # Safety
+ * Don't be stupid
+ */
+int minimuxer_install_ipa(char *bundle_id);
+
+/**
  * Yeets an ipa to the afc jail
  * # Safety
  * Don't be stupid

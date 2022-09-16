@@ -61,3 +61,24 @@ pub unsafe extern "C" fn minimuxer_yeet_app_afc(
 
     minimuxer::tools::yeet_app_afc(bundle_id, slc)
 }
+
+#[no_mangle]
+/// Installs an ipa with a bundle ID
+/// Expects the ipa to be in the afc jail from yeet_app_afc
+/// # Safety
+/// Don't be stupid
+pub unsafe extern "C" fn minimuxer_install_ipa(bundle_id: *mut libc::c_char) -> libc::c_int {
+    if bundle_id.is_null() {
+        return -1;
+    }
+
+    let c_str = std::ffi::CStr::from_ptr(bundle_id);
+
+    let bundle_id = match c_str.to_str() {
+        Ok(s) => s,
+        Err(_) => return -1,
+    }
+    .to_string();
+
+    minimuxer::tools::install_ipa(bundle_id)
+}
