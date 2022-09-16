@@ -176,7 +176,7 @@ fn wg_thread(
                         }
                     }
                     boringtun::noise::TunnResult::WriteToTunnelV4(b, addr) => {
-                        info!("Incoming:\n{:02X?}\n", b);
+                        // info!("Incoming:\n{:02X?}\n", b);
 
                         // Parse the bytes as an IP packet
                         let ip_packet = etherparse::SlicedPacket::from_ip(b).unwrap();

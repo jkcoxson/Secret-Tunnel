@@ -223,7 +223,6 @@ pub unsafe extern "C" fn tcp_handle_recv(
     }
     let mut handle = Box::from_raw(handle as *mut PortHandle);
 
-    info!("Attempting to receive {} bytes", len);
     let mut to_return = vec![];
 
     // Check if we have unused data in the buffer
