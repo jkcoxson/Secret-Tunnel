@@ -523,24 +523,26 @@ fn wg_thread(
 
                         match handle {
                             handle::InternalHandle::Tcp(handle) => {
-                                for data in data.chunks(handle.window_size as usize) {
-                                    let mut pkt_buf = [0u8; 9088];
-                                    let pkt = packet_builder!(
-                                        pkt_buf,
-                                        ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                        tcp({set_source => internal_port, set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::PSH), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
-                                        payload({data})
-                                    );
+                                for data in data.chunks(8960) {
+                                    for data in data.chunks(handle.window_size as usize) {
+                                        let mut pkt_buf = [0u8; 9088]; // iOS's max UDP size - 128
+                                        let pkt = packet_builder!(
+                                            pkt_buf,
+                                            ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                            tcp({set_source => internal_port, set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::PSH), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                            payload({data})
+                                        );
 
-                                    handle.seq += data.len() as u32;
+                                        handle.seq += data.len() as u32;
 
-                                    let mut buf = [0u8; 9216];
-                                    match tun.encapsulate(pkt.packet(), &mut buf) {
-                                        boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                                            socket.send_to(b, peer_ip.unwrap()).unwrap();
-                                        }
-                                        _ => {
-                                            warn!("Unexpected result");
+                                        let mut buf = [0u8; 9216];
+                                        match tun.encapsulate(pkt.packet(), &mut buf) {
+                                            boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                                socket.send_to(b, peer_ip.unwrap()).unwrap();
+                                            }
+                                            _ => {
+                                                warn!("Unexpected result");
+                                            }
                                         }
                                     }
                                 }
