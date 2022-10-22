@@ -534,7 +534,7 @@ fn wg_thread(
 
                                     handle.seq += data.len() as u32;
 
-                                    let mut buf = Vec::new();
+                                    let mut buf = [0u8; 9216];
                                     match tun.encapsulate(pkt.packet(), &mut buf) {
                                         boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                             socket.send_to(b, peer_ip.unwrap()).unwrap();
