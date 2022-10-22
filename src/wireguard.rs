@@ -524,7 +524,7 @@ fn wg_thread(
                         match handle {
                             handle::InternalHandle::Tcp(handle) => {
                                 for data in data.chunks(handle.window_size as usize) {
-                                    let mut pkt_buf = [0u8; 1500];
+                                    let mut pkt_buf = [0u8; u16::MAX as usize];
                                     let pkt = packet_builder!(
                                         pkt_buf,
                                         ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
@@ -534,7 +534,7 @@ fn wg_thread(
 
                                     handle.seq += data.len() as u32;
 
-                                    let mut buf = [0; 2048];
+                                    let mut buf = [0; u16::MAX as usize];
                                     match tun.encapsulate(pkt.packet(), &mut buf) {
                                         boringtun::noise::TunnResult::WriteToNetwork(b) => {
                                             socket.send_to(b, peer_ip.unwrap()).unwrap();
