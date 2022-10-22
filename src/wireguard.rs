@@ -524,8 +524,7 @@ fn wg_thread(
                         match handle {
                             handle::InternalHandle::Tcp(handle) => {
                                 for data in data.chunks(handle.window_size as usize) {
-                                    let mut pkt_buf =
-                                        Vec::with_capacity(handle.window_size as usize);
+                                    let mut pkt_buf = [0u8; 9088];
                                     let pkt = packet_builder!(
                                         pkt_buf,
                                         ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
