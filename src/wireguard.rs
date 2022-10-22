@@ -247,6 +247,9 @@ fn wg_thread(
                                         _ => continue, // wrong protocol
                                     };
 
+                                    // Update window size
+                                    handle.window_size = tcp_packet.window_size();
+
                                     // Opening a connection
                                     if tcp_packet.syn() {
                                         // Syn is special: it has a phantom data byte so we increase ack by 1
@@ -520,23 +523,25 @@ fn wg_thread(
 
                         match handle {
                             handle::InternalHandle::Tcp(handle) => {
-                                let mut pkt_buf = [0u8; 1500];
-                                let pkt = packet_builder!(
-                                    pkt_buf,
-                                    ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
-                                    tcp({set_source => internal_port, set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::PSH), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
-                                    payload({data.clone()})
-                                );
+                                for data in data.chunks(handle.window_size as usize) {
+                                    let mut pkt_buf = [0u8; 1500];
+                                    let pkt = packet_builder!(
+                                        pkt_buf,
+                                        ipv4({set_source => ipv4addr!(self_ip.unwrap().to_string()), set_destination => ipv4addr!(peer_vpn_ip.unwrap().to_string()) }) /
+                                        tcp({set_source => internal_port, set_destination => handle.port, set_flags => (TcpFlags::ACK | TcpFlags::PSH), set_sequence => handle.seq, set_acknowledgement => handle.ack}) /
+                                        payload({data})
+                                    );
 
-                                handle.seq += data.len() as u32;
+                                    handle.seq += data.len() as u32;
 
-                                let mut buf = [0; 2048];
-                                match tun.encapsulate(pkt.packet(), &mut buf) {
-                                    boringtun::noise::TunnResult::WriteToNetwork(b) => {
-                                        socket.send_to(b, peer_ip.unwrap()).unwrap();
-                                    }
-                                    _ => {
-                                        warn!("Unexpected result");
+                                    let mut buf = [0; 2048];
+                                    match tun.encapsulate(pkt.packet(), &mut buf) {
+                                        boringtun::noise::TunnResult::WriteToNetwork(b) => {
+                                            socket.send_to(b, peer_ip.unwrap()).unwrap();
+                                        }
+                                        _ => {
+                                            warn!("Unexpected result");
+                                        }
                                     }
                                 }
                             }
@@ -559,6 +564,7 @@ fn wg_thread(
                             outgoing: sender,
                             seq: rand::random::<u32>(),
                             ack: 0,
+                            window_size: u16::MAX,
                             fin_state: FinStatus::Chill,
                         };
 

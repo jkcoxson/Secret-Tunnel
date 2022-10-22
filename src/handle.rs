@@ -60,6 +60,8 @@ pub(crate) struct TcpInternal {
     pub(crate) seq: u32,
     /// Ack number for the next packet
     pub(crate) ack: u32,
+    /// The window size
+    pub(crate) window_size: u16,
     /// The state that a finish is in
     pub(crate) fin_state: FinStatus,
 }
