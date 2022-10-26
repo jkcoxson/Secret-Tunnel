@@ -1,4 +1,8 @@
 # SECRET TUNNEL!
+
+So I accidently wrote [software](https://github.com/jkcoxson/em_proxy) that is a ton faster than this and way simpler.
+Rip secret tunnel.
+
 ```
 ...Yeah, and I forget the next couple of lines, but then it goes...
 Secret tunnel!
